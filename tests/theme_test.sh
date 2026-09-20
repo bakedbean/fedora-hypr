@@ -32,4 +32,20 @@ grep -q 'rgb(ff0000)' "$cur/theme/hyprland.conf"
 # unknown theme is an error
 ! fh-theme-set does-not-exist 2>/dev/null
 
+# path traversal / invalid names are rejected
+! fh-theme-set '../../etc' 2>/dev/null
+! fh-theme-set 'a/b' 2>/dev/null
+
+# sed metacharacters in a colors.toml value don't corrupt the rendered output
+mkdir -p "$HOME/.config/fedora-hypr/themes/tokyo-night"
+cat > "$HOME/.config/fedora-hypr/themes/tokyo-night/colors.toml" <<'EOF'
+accent = "#ff0000"
+cursor = "a&b|c"
+EOF
+mkdir -p "$HOME/.config/fedora-hypr/themed"
+echo 'X{{ accent }}Y' > "$HOME/.config/fedora-hypr/themed/probe.txt.tpl"
+fh-theme-set tokyo-night
+grep -qx 'X#ff0000Y' "$cur/theme/probe.txt"
+rm -rf "$HOME/.config/fedora-hypr/themes/tokyo-night" "$HOME/.config/fedora-hypr/themed"
+
 echo "theme_test: OK"

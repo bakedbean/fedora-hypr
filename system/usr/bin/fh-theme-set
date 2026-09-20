@@ -14,6 +14,8 @@ themes="$FH_PATH/themes"
 
 name=$(echo "$1" | sed -E 's/<[^>]+>//g' | tr '[:upper:]' '[:lower:]' | tr ' ' '-')
 
+[[ $name =~ ^[a-z0-9-]+$ ]] || { echo "Invalid theme name '$1'" >&2; exit 1; }
+
 if [[ ! -d $themes/$name && ! -d $user_themes/$name ]]; then
   echo "Theme '$name' does not exist" >&2; exit 1
 fi
