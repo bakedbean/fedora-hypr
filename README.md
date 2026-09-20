@@ -30,11 +30,22 @@ always tracks the base image's Fedora version (currently `44`).
 `make vm` runs `vm.sh`:
 
 - First run: creates a 20G `vm/disk.raw`, loads the image into rootful podman's store (`podman save |
-  sudo podman load`, skipped if rootful podman already has it), and runs `bootc install to-disk
+  sudo podman load`, skipped if rootful podman already has the same image id), and runs `bootc install to-disk
   --via-loopback --wipe --filesystem btrfs --generic-image` against it inside a privileged container.
 - Later runs: boot the existing `vm/disk.raw` as-is (no reinstall).
 - `FRESH=1 make vm`: force a wipe and reinstall to `vm/disk.raw` even if it already exists — use this
   after rebuilding the image to pick up changes.
+- Exposes a QEMU monitor on `vm/monitor.sock` and logs the guest serial console to `vm/serial.log`.
+  Your host's Hyprland intercepts SUPER combos before QEMU sees them, so inject keys through the
+  monitor instead, e.g. to open a terminal with SUPER+RETURN in the guest:
+  ```
+  echo 'sendkey meta_l-ret' | socat - UNIX-CONNECT:vm/monitor.sock
+  # or: echo 'sendkey meta_l-ret' | nc -U vm/monitor.sock
+  ```
+  (`sendkey meta_l-shift-b`, `sendkey ctrl-alt-f2`, … — key names as in `qemu-system-x86_64
+  -monitor stdio` → `sendkey ?`). Once Hyprland is running in the guest, Ctrl+Alt+Fn VT switching
+  from the QEMU window no longer works because the compositor owns input; use the monitor
+  (`sendkey ctrl-alt-f2`) or read `vm/serial.log` instead.
 - Boots with UEFI (OVMF), virtio-gpu (GL), 4 GB RAM, virtio net/keyboard/tablet, and a pipewire audio
   device. OVMF firmware paths default to the Arch locations
   (`/usr/share/edk2/x64/OVMF_{CODE,VARS}.4m.fd`) and can be overridden with the `OVMF_CODE` /
@@ -70,6 +81,20 @@ sudo bootc switch ghcr.io/bakedbean/fedora-hypr:44
 This re-points the booted system at the registry image without a reinstall; `bootc upgrade` from then
 on pulls new layers of that image.
 
+## First login
+
+The disk boots to tuigreet on tty1. Log in as `eben` with password `changeme`; you are forced to pick a
+new password before the Hyprland session starts. The user and its default theme are created by
+`fh-first-boot-user.service` before greetd comes up, so the first session already has its colours and
+wallpaper. The Flatpak apps in `system/usr/share/fedora-hypr/flatpaks.txt` (Signal, Spotify, Obsidian,
+1Password, …) are installed in the background by `fh-first-boot-flatpaks.service` once the network is
+up; it retries every minute until every app is present. Watch it with
+`journalctl -fu fh-first-boot-flatpaks`. SSH is disabled by default (`sudo systemctl enable --now sshd`
+to turn it on).
+
+**Fingerprint:** PAM is already configured for fingerprint auth (login, sudo, polkit, hyprlock). Run
+`fh-setup-fingerprint` (or Setup → Fingerprint in the `fh-menu`) to enrol a finger.
+
 ## Day 2
 
 - `fh-update` — pull and stage the latest image (wraps `bootc upgrade`); reboot to apply.
@@ -93,7 +118,7 @@ fedora-hypr/
 ├── Containerfile               # FROM ghcr.io/ublue-os/base-main:44 … RUN bootc container lint
 ├── build/                      # scripts run during image build
 │   ├── 10-packages.sh          # dnf install from Fedora repos + pinned COPRs
-│   ├── 20-services.sh          # systemctl enable greetd, fh-first-boot; drop COPR repo files
+│   ├── 20-services.sh          # systemctl enable greetd + first-boot units, disable sshd, authselect; drop COPR repo files
 │   ├── packages/                 # fedora.txt / copr.txt package lists
 │   └── repos/                    # pinned .repo files for COPRs used at build time
 ├── system/                     # copied verbatim onto / in the image (COPY system/ /)
@@ -102,14 +127,16 @@ fedora-hypr/
 │   │   ├── default/               # canonical hypr/waybar/mako/swayosd/hyprlock/hypridle configs
 │   │   ├── themed/                # theme-parameterized templates (*.tpl)
 │   │   ├── themes/<name>/         # ported theme color definitions
-│   │   └── flatpaks.txt           # Flatpaks installed by fh-first-boot
-│   ├── usr/share/wayland-sessions/ # hyprland-uwsm.desktop (session entry for greetd)
-│   ├── usr/lib/systemd/system/    # fh-first-boot.service
+│   │   └── flatpaks.txt           # Flatpaks installed by fh-first-boot-flatpaks
+│   ├── usr/share/wayland-sessions/ # fedora-hypr.desktop (session entry for greetd)
+│   ├── usr/lib/systemd/system/    # fh-first-boot-user.service, fh-first-boot-flatpaks.service
+│   ├── usr/lib/tmpfiles.d/        # /var/cache/tuigreet
 │   └── etc/
 │       ├── skel/.config/          # thin per-user config seeded on first login, sources the defaults
+│       │                            # (hypridle.conf / hyprlock.conf live here: both only search ~/.config/hypr)
 │       ├── greetd/config.toml     # tuigreet → uwsm start Hyprland
-│       └── ...                    # NetworkManager, environment.d, sudoers.d, profile.d
-├── tests/                       # check.sh (in-image self-check) + scripts_test.sh, theme_test.sh
+│       └── ...                    # NetworkManager, environment.d, sudoers.d, profile.d, fish/conf.d
+├── tests/                       # check.sh (in-image self-check) + scripts_test.sh, theme_test.sh, binds_test.sh
 ├── vm.sh                        # install-to-raw-disk + QEMU boot for local smoke testing
 ├── Makefile                     # build / shell / check / push / vm targets
 └── .github/workflows/build.yml  # CI: build, self-check, push to ghcr.io
