@@ -1,0 +1,9 @@
+#!/bin/bash
+# Adapted from Omarchy (MIT) — https://github.com/basecamp/omarchy
+
+
+if fh-battery-present && ! fh-ac-present; then
+  fh-powerprofiles-set battery
+else
+  fh-powerprofiles-set ac
+fi

@@ -1,0 +1,8 @@
+#!/bin/bash
+# Adapted from Omarchy (MIT) — https://github.com/basecamp/omarchy
+
+
+APP_ID="org.fedorahypr.$(basename "$1")"
+LAUNCH_COMMAND="fh-launch-tui $@"
+
+exec fh-launch-or-focus "$APP_ID" "$LAUNCH_COMMAND"

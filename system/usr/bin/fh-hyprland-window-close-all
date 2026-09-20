@@ -1,0 +1,10 @@
+#!/bin/bash
+# Adapted from Omarchy (MIT) — https://github.com/basecamp/omarchy
+
+
+hyprctl clients -j | \
+  jq -r ".[].address" | \
+  xargs -I{} hyprctl dispatch closewindow address:{}
+
+# Move to first workspace
+hyprctl dispatch workspace 1

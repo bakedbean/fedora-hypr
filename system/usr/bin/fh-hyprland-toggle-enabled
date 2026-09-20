@@ -1,0 +1,5 @@
+#!/bin/bash
+# Adapted from Omarchy (MIT) — https://github.com/basecamp/omarchy
+
+
+[[ -f "$HOME/.local/state/fedora-hypr/toggles/hypr/$1.conf" ]]

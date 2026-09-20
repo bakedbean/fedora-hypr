@@ -26,6 +26,12 @@ playerctl
 pamixer
 wiremix
 gum
+libxkbcommon-utils
+v4l-utils
+upower
+tesseract
+socat
+ffmpeg
 # terminal + cli
 alacritty
 fish
@@ -65,3 +71,5 @@ google-noto-sans-fonts
 fontawesome-6-free-fonts
 yaru-icon-theme
 kvantum
+# build/test tooling
+ShellCheck

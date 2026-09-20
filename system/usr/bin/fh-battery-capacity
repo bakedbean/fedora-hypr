@@ -1,0 +1,10 @@
+#!/bin/bash
+# Adapted from Omarchy (MIT) — https://github.com/basecamp/omarchy
+
+
+battery_info=$(upower -i $(upower -e | grep BAT))
+
+echo "$battery_info" | awk '/energy-full:/ {
+    printf "%d", $2
+    exit
+}'

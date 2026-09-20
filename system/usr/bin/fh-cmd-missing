@@ -1,0 +1,11 @@
+#!/bin/bash
+# Adapted from Omarchy (MIT) — https://github.com/basecamp/omarchy
+
+
+for cmd in "$@"; do
+  if ! command -v "$cmd" &>/dev/null; then
+    exit 0
+  fi
+done
+
+exit 1

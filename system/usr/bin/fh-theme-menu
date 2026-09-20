@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# Pick a theme from a Walker dmenu and apply it.
+set -euo pipefail
+fh-theme-list | fh-launch-walker --dmenu -p "Theme…" | xargs -r fh-theme-set

@@ -1,0 +1,11 @@
+#!/bin/bash
+# Adapted from Omarchy (MIT) — https://github.com/basecamp/omarchy
+
+
+fh-toggle waybar-off
+
+if pgrep -x waybar >/dev/null; then
+  pkill -9 -x waybar
+else
+  uwsm-app -- waybar >/dev/null 2>&1 &
+fi

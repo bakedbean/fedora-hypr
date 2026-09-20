@@ -1,0 +1,14 @@
+#!/bin/bash
+# Adapted from Omarchy (MIT) — https://github.com/basecamp/omarchy
+
+
+if (($# == 0)); then
+  echo "Usage: fh-launch-or-focus-webapp [window-pattern] [url-and-flags...]"
+  exit 1
+fi
+
+WINDOW_PATTERN="$1"
+shift
+LAUNCH_COMMAND="fh-launch-webapp $@"
+
+exec fh-launch-or-focus "$WINDOW_PATTERN" "$LAUNCH_COMMAND"

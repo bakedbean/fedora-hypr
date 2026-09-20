@@ -1,0 +1,8 @@
+#!/bin/bash
+# Adapted from Omarchy (MIT) — https://github.com/basecamp/omarchy
+#
+# Launch a floating terminal, run a command in it, and wait for a keypress
+# when done (unless the command was interrupted with Ctrl-C).
+
+cmd="$*"
+exec setsid uwsm-app -- xdg-terminal-exec --app-id=org.fedorahypr.terminal --title=fedora-hypr -e bash -c "clear; $cmd; if (( \$? != 130 )); then gum spin --spinner globe --title 'Done! Press any key to close...' -- bash -c 'read -n 1 -s'; fi"

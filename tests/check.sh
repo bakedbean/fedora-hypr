@@ -66,4 +66,7 @@ check test -f /etc/skel/.config/walker/themes/fh-default/style.css
 check grep -q "../fedora-hypr/current/theme/swayosd.css" /etc/skel/.config/swayosd/style.css
 check bash -c '! grep -q dbus-update-activation-environment /usr/share/fedora-hypr/default/hypr/autostart.conf'
 
+# --- Task 7: helper scripts
+check bash /tests/scripts_test.sh
+
 exit $fail

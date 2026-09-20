@@ -1,0 +1,9 @@
+#!/bin/bash
+# Adapted from Omarchy (MIT) — https://github.com/basecamp/omarchy
+
+
+for ac in /sys/class/power_supply/AC* /sys/class/power_supply/ADP*; do
+  [[ -r $ac/online && $(cat "$ac/online") == "1" ]] && exit 0
+done
+
+exit 1

@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# Stage the next OS image and update Flatpaks. Reboot to activate the image.
+set -euo pipefail
+sudo bootc upgrade
+flatpak update -y --noninteractive
+sudo bootc status
+if gum confirm "Reboot now to activate the new image?"; then systemctl reboot; fi

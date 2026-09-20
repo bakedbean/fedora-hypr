@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# Cycle to the next background for the current theme.
+# A single-entry "next background" action is enough for now (YAGNI).
+set -euo pipefail
+exec fh-theme-bg-next

@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# Runs once per user from Hyprland exec-once: pick the default theme and seed state dirs.
+set -euo pipefail
+marker="$HOME/.local/state/fedora-hypr/first-run.done"
+[[ -f $marker ]] && exit 0
+mkdir -p "$HOME/.local/state/fedora-hypr/toggles/hypr" "$HOME/.config/fedora-hypr/current"
+[[ -f $HOME/.config/fedora-hypr/current/theme.name ]] || fh-theme-set tokyo-night
+touch "$marker"

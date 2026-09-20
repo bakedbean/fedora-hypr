@@ -1,0 +1,179 @@
+#!/bin/bash
+# Adapted from Omarchy (MIT) — https://github.com/basecamp/omarchy
+#
+# Trimmed for fedora-hypr: keeps only Apps, Learn, Trigger (Capture, Toggle),
+# Style (Theme, Background), Setup (Wifi, Bluetooth, Audio, Power profile),
+# Update, and System (Lock, Suspend, Restart, Shutdown, Reboot to firmware).
+# Everything Arch/Fedora-install-specific (Install, Remove, About, Hardware,
+# Reminder, Share, Font, Screensaver, Setup->Defaults/Config/Security/System)
+# was dropped rather than ported.
+
+# Set to true when going directly to a submenu, so we can exit directly
+BACK_TO_EXIT=false
+
+back_to() {
+  local parent_menu="$1"
+
+  if [[ $BACK_TO_EXIT == "true" ]]; then
+    exit 0
+  elif [[ -n $parent_menu ]]; then
+    "$parent_menu"
+  else
+    show_main_menu
+  fi
+}
+
+toggle_existing_menu() {
+  if pgrep -f "walker.*--dmenu" >/dev/null; then
+    walker --close >/dev/null 2>&1
+    exit 0
+  fi
+}
+
+menu() {
+  local prompt="$1"
+  local options="$2"
+  local extra="$3"
+  local preselect="$4"
+
+  read -r -a args <<<"$extra"
+
+  if [[ -n $preselect ]]; then
+    local index
+    index=$(echo -e "$options" | grep -nxF "$preselect" | cut -d: -f1)
+    if [[ -n $index ]]; then
+      args+=("-c" "$index")
+    fi
+  fi
+
+  echo -e "$options" | fh-launch-walker --dmenu --width 295 --minheight 1 --maxheight 630 -p "$prompt…" "${args[@]}" 2>/dev/null
+}
+
+present_terminal() {
+  fh-launch-floating-terminal-with-presentation "$1"
+}
+
+show_learn_menu() {
+  case $(menu "Learn" "  Keybindings\n  Hyprland\n  Fedora") in
+  *Keybindings*) fh-menu-keybindings ;;
+  *Hyprland*) fh-launch-webapp "https://wiki.hypr.land/" ;;
+  *Fedora*) fh-launch-webapp "https://docs.fedoraproject.org/" ;;
+  *) show_main_menu ;;
+  esac
+}
+
+show_trigger_menu() {
+  case $(menu "Trigger" "  Capture\n󰔎  Toggle") in
+  *Capture*) show_capture_menu ;;
+  *Toggle*) show_toggle_menu ;;
+  *) show_main_menu ;;
+  esac
+}
+
+show_capture_menu() {
+  case $(menu "Capture" "  Screenshot\n  Screenrecord") in
+  *Screenshot*) fh-capture-screenshot ;;
+  *Screenrecord*) fh-capture-screenrecording ;;
+  *) back_to show_trigger_menu ;;
+  esac
+}
+
+show_toggle_menu() {
+  local options="󰔎  Nightlight\n󱫖  Idle Lock\n󰂛  Notifications\n󰍜  Top Bar\n󱂬  Workspace Layout\n  Window Gaps\n  1-Window Ratio\n󰍹  Monitor Scaling\n󰟸  Touchpad"
+
+  case $(menu "Toggle" "$options") in
+  *Nightlight*) fh-toggle-nightlight ;;
+  *Idle*) fh-toggle-idle ;;
+  *Notifications*) fh-toggle-notification-silencing ;;
+  *Bar*) fh-toggle-waybar ;;
+  *Layout*) fh-hyprland-workspace-layout-toggle ;;
+  *Ratio*) fh-hyprland-window-single-square-aspect-toggle ;;
+  *Gaps*) fh-hyprland-window-gaps-toggle ;;
+  *Scaling*) fh-hyprland-monitor-scaling-cycle ;;
+  *Touchpad*) fh-toggle-touchpad ;;
+  *) back_to show_trigger_menu ;;
+  esac
+}
+
+show_style_menu() {
+  case $(menu "Style" "󰸌  Theme\n  Background") in
+  *Theme*) show_theme_menu ;;
+  *Background*) show_background_menu ;;
+  *) show_main_menu ;;
+  esac
+}
+
+show_theme_menu() {
+  fh-theme-menu
+}
+
+show_background_menu() {
+  fh-theme-bg-menu
+}
+
+show_setup_menu() {
+  case $(menu "Setup" "  Wifi\n󰂯  Bluetooth\n  Audio\n󱐋  Power Profile") in
+  *Wifi*) fh-launch-wifi ;;
+  *Bluetooth*) fh-launch-bluetooth ;;
+  *Audio*) fh-launch-audio ;;
+  *Power*) show_setup_power_menu ;;
+  *) show_main_menu ;;
+  esac
+}
+
+show_setup_power_menu() {
+  local profile
+  profile=$(menu "Power Profile" "$(fh-powerprofiles-list)" "" "$(powerprofilesctl get)")
+
+  if [[ $profile == "CNCLD" || -z $profile ]]; then
+    back_to show_setup_menu
+  else
+    powerprofilesctl set "$profile"
+  fi
+}
+
+show_system_menu() {
+  case $(menu "System" "  Lock\n󰒲  Suspend\n󰜉  Restart\n  Reboot to Firmware\n󰐥  Shutdown") in
+  *Lock*) fh-system-lock ;;
+  *Suspend*) systemctl suspend ;;
+  *"Reboot to Firmware"*) systemctl reboot --firmware-setup ;;
+  *Restart*) systemctl reboot ;;
+  *Shutdown*) systemctl poweroff ;;
+  *) back_to show_main_menu ;;
+  esac
+}
+
+show_main_menu() {
+  go_to_menu "$(menu "Go" "󰀻  Apps\n󰧑  Learn\n󱓞  Trigger\n  Style\n  Setup\n  Update\n  System")"
+}
+
+go_to_menu() {
+  case "${1,,}" in
+  *apps*) walker -p "Launch…" ;;
+  *learn*) show_learn_menu ;;
+  *trigger*) show_trigger_menu ;;
+  *capture*) show_capture_menu ;;
+  *toggle*) show_toggle_menu ;;
+  *style*) show_style_menu ;;
+  *theme*) show_theme_menu ;;
+  *background*) show_background_menu ;;
+  *screenrecord*) fh-capture-screenrecording ;;
+  *setup*) show_setup_menu ;;
+  *update*) present_terminal fh-update ;;
+  *system*) show_system_menu ;;
+  *power*) show_system_menu ;;
+  esac
+}
+
+# Allow user extensions and overrides
+USER_EXTENSIONS="$HOME/.config/fedora-hypr/extensions/menu.sh"
+[[ -f $USER_EXTENSIONS ]] && source "$USER_EXTENSIONS"
+
+toggle_existing_menu
+
+if [[ -n $1 ]]; then
+  BACK_TO_EXIT=true
+  go_to_menu "$1"
+else
+  show_main_menu
+fi
