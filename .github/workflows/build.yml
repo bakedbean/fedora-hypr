@@ -1,0 +1,34 @@
+name: build
+on:
+  push:
+    branches: [main]
+    paths-ignore: ['docs/**', 'README.md']
+  schedule:
+    - cron: '30 5 * * *'   # daily, after ublue's base-main rebuild
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  IMAGE: ghcr.io/${{ github.repository }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Derive tag from Containerfile
+        run: echo "TAG=$(sed -n 's/^FROM .*:\([0-9]*\)$/\1/p' Containerfile)" >> "$GITHUB_ENV"
+      - name: Build
+        run: |
+          sudo podman build -t "$IMAGE:$TAG" -t "$IMAGE:$TAG-$(date +%Y%m%d)" .
+      - name: Self-check
+        run: sudo podman run --rm -v ./tests:/tests:ro "$IMAGE:$TAG" bash /tests/check.sh
+      - name: Login
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | sudo podman login ghcr.io -u "${{ github.actor }}" --password-stdin
+      - name: Push
+        run: |
+          sudo podman push "$IMAGE:$TAG"
+          sudo podman push "$IMAGE:$TAG-$(date +%Y%m%d)"
