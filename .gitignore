@@ -1,1 +1,4 @@
 .superpowers/
+vm/
+*.raw
+*.qcow2
