@@ -44,4 +44,7 @@ check test -f /etc/sudoers.d/wheel
 check bash -c 'FH_SKIP_FLATPAK=1 FH_USER=testuser2 fh-first-boot && test -f /var/lib/fedora-hypr/first-boot.done'
 check grep -q '^Restart=on-failure' /usr/lib/systemd/system/fh-first-boot.service
 
+# --- Task 5: theme engine
+check bash /tests/theme_test.sh
+
 exit $fail

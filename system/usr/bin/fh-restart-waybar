@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+pgrep -x waybar >/dev/null || exit 0
+pkill -x waybar; sleep 0.2
+setsid uwsm-app -- waybar >/dev/null 2>&1 &

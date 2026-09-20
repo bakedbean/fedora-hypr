@@ -1,0 +1,2 @@
+#!/usr/bin/env bash
+cat "$HOME/.config/fedora-hypr/current/theme.name" 2>/dev/null

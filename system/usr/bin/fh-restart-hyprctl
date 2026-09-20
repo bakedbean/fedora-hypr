@@ -1,0 +1,2 @@
+#!/usr/bin/env bash
+pgrep -x Hyprland >/dev/null && hyprctl reload >/dev/null; exit 0

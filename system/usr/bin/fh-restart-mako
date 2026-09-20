@@ -1,0 +1,2 @@
+#!/usr/bin/env bash
+pgrep -x mako >/dev/null && makoctl reload; exit 0

@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+# Adapted from Omarchy (MIT) — https://github.com/basecamp/omarchy
+# Apply a theme: render templates into ~/.config/fedora-hypr/current/theme and reload apps.
+set -uo pipefail
+: "${FH_PATH:=/usr/share/fedora-hypr}"
+
+if [[ -z ${1:-} ]]; then echo "Usage: fh-theme-set <theme-name>" >&2; exit 1; fi
+
+state="$HOME/.config/fedora-hypr"
+current="$state/current/theme"
+next="$state/current/next-theme"
+user_themes="$state/themes"
+themes="$FH_PATH/themes"
+
+name=$(echo "$1" | sed -E 's/<[^>]+>//g' | tr '[:upper:]' '[:lower:]' | tr ' ' '-')
+
+if [[ ! -d $themes/$name && ! -d $user_themes/$name ]]; then
+  echo "Theme '$name' does not exist" >&2; exit 1
+fi
+
+rm -rf "$next"; mkdir -p "$next"
+cp -r "$themes/$name/." "$next/" 2>/dev/null
+cp -r "$user_themes/$name/." "$next/" 2>/dev/null   # user overlay wins
+
+fh-theme-set-templates
+
+rm -rf "$current"; mv "$next" "$current"
+echo "$name" > "$state/current/theme.name"
+
+[[ ${FH_THEME_SKIP_BACKGROUND:-0} == 1 ]] || fh-theme-bg-next
+
+fh-restart-waybar
+fh-restart-swayosd
+fh-restart-mako
+fh-restart-hyprctl
+
+hook="$state/hooks/theme-set"
+[[ -x $hook ]] && "$hook" "$name" >/dev/null
+exit 0

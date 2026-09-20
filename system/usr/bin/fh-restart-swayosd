@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+pgrep -x swayosd-server >/dev/null || exit 0
+pkill -x swayosd-server; sleep 0.2
+setsid uwsm-app -- swayosd-server >/dev/null 2>&1 &

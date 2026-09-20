@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+: "${FH_PATH:=/usr/share/fedora-hypr}"
+{ ls "$FH_PATH/themes"; ls "$HOME/.config/fedora-hypr/themes" 2>/dev/null; } | sort -u
