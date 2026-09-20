@@ -8,8 +8,8 @@ Wants=network-online.target
 Type=oneshot
 RemainAfterExit=yes
 ExecStart=/usr/bin/fh-first-boot
-ExecStartPost=/usr/bin/mkdir -p /var/lib/fedora-hypr
-ExecStartPost=/usr/bin/touch /var/lib/fedora-hypr/first-boot.done
+Restart=on-failure
+RestartSec=60
 
 [Install]
 WantedBy=multi-user.target

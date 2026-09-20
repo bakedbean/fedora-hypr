@@ -41,5 +41,7 @@ check systemd-analyze verify /usr/lib/systemd/system/fh-first-boot.service
 check bash -c 'FH_SKIP_FLATPAK=1 FH_USER=testuser fh-first-boot && id -nG testuser | grep -qw wheel && test -d /var/home/testuser'
 check bash -c 'FH_SKIP_FLATPAK=1 FH_USER=testuser fh-first-boot'   # idempotent: second run succeeds
 check test -f /etc/sudoers.d/wheel
+check bash -c 'FH_SKIP_FLATPAK=1 FH_USER=testuser2 fh-first-boot && test -f /var/lib/fedora-hypr/first-boot.done'
+check grep -q '^Restart=on-failure' /usr/lib/systemd/system/fh-first-boot.service
 
 exit $fail
