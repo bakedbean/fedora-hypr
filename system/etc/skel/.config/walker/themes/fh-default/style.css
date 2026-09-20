@@ -1,4 +1,4 @@
-@import "~/.config/fedora-hypr/current/theme/walker.css";
+@import "../../../fedora-hypr/current/theme/walker.css";
 
 * {
   all: unset;

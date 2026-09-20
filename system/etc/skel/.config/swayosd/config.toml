@@ -1,7 +1,6 @@
-# swayosd's config.toml has no include directive, so this is a copy of
-# /usr/share/fedora-hypr/default/swayosd/config.toml (not a reference to it).
-# To customise, edit this file directly.
+# swayosd only reads ~/.config/swayosd/config.toml (no include directive,
+# and no /usr/share default is consulted) — this file is yours to edit.
 [server]
 show_percentage = true
 max_volume = 100
-style = "/usr/share/fedora-hypr/default/swayosd/style.css"
+style = "~/.config/swayosd/style.css"

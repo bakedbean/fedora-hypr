@@ -1,4 +1,0 @@
-[server]
-show_percentage = true
-max_volume = 100
-style = "/usr/share/fedora-hypr/default/swayosd/style.css"

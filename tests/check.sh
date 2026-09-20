@@ -61,5 +61,9 @@ check test -f /usr/share/fedora-hypr/default/mako/core.ini
 check grep -q "fedora-hypr/current/theme/alacritty.toml" /etc/skel/.config/alacritty/alacritty.toml
 check bash -c 'sed "s|//.*||" /usr/share/fedora-hypr/default/waybar/config.jsonc | jq .'
 check bash -c 'sed "s|//.*||" /etc/skel/.config/waybar/config.jsonc | jq .'
+check bash -c '! grep -rn "@import \"~" /usr/share/fedora-hypr /etc/skel'
+check test -f /etc/skel/.config/walker/themes/fh-default/style.css
+check grep -q "../fedora-hypr/current/theme/swayosd.css" /etc/skel/.config/swayosd/style.css
+check bash -c '! grep -q dbus-update-activation-environment /usr/share/fedora-hypr/default/hypr/autostart.conf'
 
 exit $fail
