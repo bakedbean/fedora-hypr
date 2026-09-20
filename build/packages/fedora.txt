@@ -1,0 +1,67 @@
+# session / system
+greetd
+tuigreet
+flatpak
+iwd
+power-profiles-daemon
+fprintd
+fprintd-pam
+gnome-keyring
+gnome-keyring-pam
+libsecret
+libva-intel-media-driver
+xdg-desktop-portal-gtk
+qt5-qtwayland
+qt6-qtwayland
+xdg-terminal-exec
+# shell / wm helpers
+waybar
+mako
+swaybg
+grim
+slurp
+wl-clipboard
+brightnessctl
+playerctl
+pamixer
+wiremix
+gum
+# terminal + cli
+alacritty
+fish
+tmux
+neovim
+btop
+bat
+eza
+fd-find
+ripgrep
+zoxide
+jq
+du-dust
+tldr
+fastfetch
+ImageMagick
+podman-docker
+# browsers + desktop apps
+chromium
+nautilus
+nautilus-python
+sushi
+gvfs-mtp
+gvfs-nfs
+gvfs-smb
+evince
+imv
+mpv
+gnome-calculator
+gnome-disk-utility
+fcitx5
+fcitx5-gtk
+fcitx5-qt
+# fonts / themes
+jetbrains-mono-fonts
+google-noto-sans-fonts
+fontawesome-6-free-fonts
+yaru-icon-theme
+kvantum

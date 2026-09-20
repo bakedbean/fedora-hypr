@@ -1,0 +1,11 @@
+[copr:copr.fedorainfracloud.org:washkinazy:wayland-wm-extras]
+name=Copr repo for wayland-wm-extras owned by washkinazy
+baseurl=https://download.copr.fedorainfracloud.org/results/washkinazy/wayland-wm-extras/fedora-$releasever-$basearch/
+type=rpm-md
+skip_if_unavailable=False
+gpgcheck=1
+gpgkey=https://download.copr.fedorainfracloud.org/results/washkinazy/wayland-wm-extras/pubkey.gpg
+repo_gpgcheck=0
+enabled=1
+enabled_metadata=1
+includepkgs=walker,elephant,swayosd,nerd-fonts-jetbrainsmono,nerd-fonts-firacode

@@ -1,0 +1,10 @@
+[copr:copr.fedorainfracloud.org:dtutila:hyprland]
+name=Copr repo for hyprland owned by dtutila
+baseurl=https://download.copr.fedorainfracloud.org/results/dtutila/hyprland/fedora-$releasever-$basearch/
+type=rpm-md
+skip_if_unavailable=False
+gpgcheck=1
+gpgkey=https://download.copr.fedorainfracloud.org/results/dtutila/hyprland/pubkey.gpg
+repo_gpgcheck=0
+enabled=1
+enabled_metadata=1

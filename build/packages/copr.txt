@@ -1,0 +1,29 @@
+# dtutila/hyprland
+hyprland
+hyprlock
+hypridle
+hyprpicker
+hyprsunset
+hyprpolkitagent
+hyprshot
+hyprland-guiutils
+xdg-desktop-portal-hyprland
+uwsm
+# washkinazy/wayland-wm-extras
+walker
+elephant
+swayosd
+nerd-fonts-jetbrainsmono
+nerd-fonts-firacode
+# mineiro/utility-belt
+impala
+bluetui
+# agaspar/omedora-4
+satty
+starship
+lazygit
+lazydocker
+mise
+gpu-screen-recorder
+# whelanh/omarchy
+hyprland-preview-share-picker

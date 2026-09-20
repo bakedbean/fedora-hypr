@@ -1,0 +1,11 @@
+[copr:copr.fedorainfracloud.org:whelanh:omarchy]
+name=Copr repo for omarchy owned by whelanh
+baseurl=https://download.copr.fedorainfracloud.org/results/whelanh/omarchy/fedora-$releasever-$basearch/
+type=rpm-md
+skip_if_unavailable=False
+gpgcheck=1
+gpgkey=https://download.copr.fedorainfracloud.org/results/whelanh/omarchy/pubkey.gpg
+repo_gpgcheck=0
+enabled=1
+enabled_metadata=1
+includepkgs=hyprland-preview-share-picker
