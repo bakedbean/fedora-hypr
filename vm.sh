@@ -32,10 +32,11 @@ if [[ ! -f $DISK || ${FRESH:-0} == 1 ]]; then
   sudo chown "$USER" "$tmp"; mv "$tmp" "$DISK"; trap - ERR
 fi
 [[ -f vm/OVMF_VARS.fd ]] || cp "$OVMF_VARS" vm/OVMF_VARS.fd
-rm -f vm/monitor.sock
+rm -f vm/monitor.sock vm/serial.sock
 
 # The host compositor swallows SUPER combos before QEMU sees them, so a QEMU monitor
-# is exposed on vm/monitor.sock for injecting keys (see README, "make vm").
+# is exposed on vm/monitor.sock for injecting keys, and the guest serial console on
+# vm/serial.sock for logging in from the host (see README, "make vm").
 
 exec qemu-system-x86_64 -enable-kvm -m 4096 -smp 4 -cpu host \
   -drive if=pflash,format=raw,readonly=on,file="$OVMF_CODE" \
@@ -46,4 +47,5 @@ exec qemu-system-x86_64 -enable-kvm -m 4096 -smp 4 -cpu host \
   -netdev user,id=n0 -device virtio-net-pci,netdev=n0 \
   -audiodev pipewire,id=a0 -device intel-hda -device hda-output,audiodev=a0 \
   -monitor unix:vm/monitor.sock,server,nowait \
-  -serial file:vm/serial.log
+  -chardev socket,id=ser0,path=vm/serial.sock,server=on,wait=off,logfile=vm/serial.log \
+  -serial chardev:ser0

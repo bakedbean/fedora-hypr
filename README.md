@@ -35,9 +35,10 @@ always tracks the base image's Fedora version (currently `44`).
 - Later runs: boot the existing `vm/disk.raw` as-is (no reinstall).
 - `FRESH=1 make vm`: force a wipe and reinstall to `vm/disk.raw` even if it already exists — use this
   after rebuilding the image to pick up changes.
-- Exposes a QEMU monitor on `vm/monitor.sock` and logs the guest serial console to `vm/serial.log`
-  (the install adds `console=ttyS0,115200 console=tty0` kargs, so the kernel/systemd boot log and
-  unit failures land there — `tail -f vm/serial.log`).
+- Exposes a QEMU monitor on `vm/monitor.sock` and the guest serial console on `vm/serial.sock` (the
+  install adds `console=ttyS0,115200 console=tty0` kargs, so a `serial-getty@ttyS0` login and the
+  kernel/systemd boot log are on it). Serial console: `socat -,raw,echo=0 UNIX-CONNECT:vm/serial.sock`
+  (Ctrl-C to detach); `vm/serial.log` keeps a copy. Log in as `eben`/`changeme`.
   Your host's Hyprland intercepts SUPER combos before QEMU sees them, so inject keys through the
   monitor instead, e.g. to open a terminal with SUPER+RETURN in the guest:
   ```
