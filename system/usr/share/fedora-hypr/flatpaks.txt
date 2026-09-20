@@ -1,0 +1,11 @@
+org.signal.Signal
+com.spotify.Client
+md.obsidian.Obsidian
+io.typora.Typora
+org.libreoffice.LibreOffice
+com.obsproject.Studio
+org.kde.kdenlive
+com.github.PintaProject.Pinta
+com.github.xournalpp.xournalpp
+org.localsend.localsend_app
+com.onepassword.OnePassword

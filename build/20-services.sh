@@ -11,3 +11,7 @@ systemctl enable iwd.service
 systemctl enable power-profiles-daemon.service
 systemctl enable bluetooth.service
 systemctl enable fprintd.service 2>/dev/null || true   # socket/dbus activated on Fedora; harmless
+
+# --- Task 4: first boot
+systemctl enable fh-first-boot.service
+chmod 0440 /etc/sudoers.d/wheel

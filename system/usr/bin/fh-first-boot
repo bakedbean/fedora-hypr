@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# First-boot setup: create the primary user and install Flatpak apps.
+# bootc does not ship /var, so anything under /var/home must be created here, not at build time.
+set -euo pipefail
+
+user="${FH_USER:-eben}"
+home="/var/home/$user"
+
+install -d -m 0755 /var/home
+
+if ! id "$user" &>/dev/null; then
+  useradd --create-home --home-dir "$home" --uid 1000 --groups wheel --shell /usr/bin/fish "$user"
+  echo "$user:changeme" | chpasswd
+  chage --lastday 0 "$user"    # force password change at first login
+  echo "fh-first-boot: created user $user"
+fi
+
+if [[ "${FH_SKIP_FLATPAK:-0}" != 1 ]]; then
+  flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+  mapfile -t apps < <(grep -vE '^\s*(#|$)' /usr/share/fedora-hypr/flatpaks.txt)
+  if ((${#apps[@]})); then
+    flatpak install -y --noninteractive flathub "${apps[@]}" || echo "fh-first-boot: some flatpaks failed; rerun fh-first-boot later" >&2
+  fi
+fi

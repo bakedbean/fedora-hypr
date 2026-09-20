@@ -1,0 +1,15 @@
+[Unit]
+Description=fedora-hypr first boot (user + flatpaks)
+ConditionPathExists=!/var/lib/fedora-hypr/first-boot.done
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/bin/fh-first-boot
+ExecStartPost=/usr/bin/mkdir -p /var/lib/fedora-hypr
+ExecStartPost=/usr/bin/touch /var/lib/fedora-hypr/first-boot.done
+
+[Install]
+WantedBy=multi-user.target

@@ -35,4 +35,11 @@ check bash -lc 'test "$FH_PATH" = /usr/share/fedora-hypr'
 check grep -q 'wifi.backend=iwd' /etc/NetworkManager/conf.d/wifi-backend-iwd.conf
 check test "$(systemctl is-enabled iwd 2>/dev/null)" = enabled
 
+# --- Task 4: first boot
+check test "$(systemctl is-enabled fh-first-boot 2>/dev/null)" = enabled
+check systemd-analyze verify /usr/lib/systemd/system/fh-first-boot.service
+check bash -c 'FH_SKIP_FLATPAK=1 FH_USER=testuser fh-first-boot && id -nG testuser | grep -qw wheel && test -d /var/home/testuser'
+check bash -c 'FH_SKIP_FLATPAK=1 FH_USER=testuser fh-first-boot'   # idempotent: second run succeeds
+check test -f /etc/sudoers.d/wheel
+
 exit $fail
