@@ -5,14 +5,19 @@ fail=0
 check() { if "$@" >/dev/null 2>&1; then echo "PASS $*"; else echo "FAIL $*"; fail=1; fi; }
 
 # --- Task 2: packages
-for b in Hyprland hyprlock hypridle hyprpicker hyprsunset hyprpolkitagent uwsm \
-         walker elephant waybar mako swaybg swayosd grim slurp satty wl-copy \
+for b in Hyprland hyprlock hypridle hyprpicker hyprsunset uwsm \
+         walker elephant waybar mako swaybg grim slurp satty wl-copy \
          alacritty starship lazygit mise impala bluetui wiremix gum greetd tuigreet \
-         gpu-screen-recorder hyprland-preview-share-picker firefox chromium nautilus \
+         gpu-screen-recorder hyprland-preview-share-picker firefox nautilus \
          fish nvim btop bat eza fd rg zoxide jq dust tldr fastfetch magick \
-         fcitx5 fprintd flatpak; do
+         fcitx5 flatpak; do
   check command -v "$b"
 done
+check test -x /usr/libexec/hyprpolkitagent
+check rpm -q fprintd
+check command -v chromium-browser
+check command -v swayosd-server
+check command -v swayosd-client
 check rpm -q nerd-fonts-jetbrainsmono nerd-fonts-firacode jetbrains-mono-fonts \
       fontawesome-6-free-fonts google-noto-sans-fonts yaru-icon-theme kvantum \
       libva-intel-media-driver xdg-desktop-portal-hyprland xdg-desktop-portal-gtk \

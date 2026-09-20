@@ -14,10 +14,14 @@ dnf -y install --setopt=install_weak_deps=False \
 
 dnf clean all
 
-# Some packages install their main binary outside $PATH or under a distro-specific
-# name; symlink them so the tool names documented in this repo's interface actually
-# resolve via `command -v`.
-ln -sf /usr/libexec/hyprpolkitagent /usr/bin/hyprpolkitagent
-ln -sf /usr/libexec/fprintd /usr/bin/fprintd
-ln -sf /usr/bin/chromium-browser /usr/bin/chromium
-ln -sf /usr/bin/swayosd-server /usr/bin/swayosd
+# Drop build-time-only content so `bootc container lint` has nothing to warn about.
+# These are transient dnf/systemd-tmpfiles/scriptlet artifacts of this RUN step, not
+# content the image needs to ship: /run and /tmp are always ephemeral, and none of
+# the /var paths below have a systemd tmpfiles.d entry, so on a real bootc system
+# they would never persist anyway (the owning services recreate their own state).
+rm -rf /run/dnf /run/selinux-policy /tmp/nvim.root
+rm -f /var/log/dnf5.log
+rm -rf /var/cache/libdnf5 /var/cache/ldconfig/aux-cache
+rm -rf /var/lib/dnf/repos
+rm -rf /var/lib/ead /var/lib/fprint /var/lib/iwd /var/lib/power-profiles-daemon
+rm -rf /var/lib/greetd/.config
