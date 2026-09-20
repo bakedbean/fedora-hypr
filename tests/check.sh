@@ -25,4 +25,14 @@ check rpm -q nerd-fonts-jetbrainsmono nerd-fonts-firacode jetbrains-mono-fonts \
 # No third-party repos left in the runtime image
 check bash -c '! ls /etc/yum.repos.d/ | grep -Eq "^(dtutila|washkinazy|mineiro|agaspar|whelanh)-"'
 
+# --- Task 3: session plumbing
+check test -f /etc/greetd/config.toml
+check grep -q 'uwsm start' /etc/greetd/config.toml
+check test -f /usr/share/wayland-sessions/hyprland-uwsm.desktop
+check test "$(systemctl is-enabled greetd 2>/dev/null)" = enabled
+check test "$(systemctl is-enabled getty@tty1 2>/dev/null)" = disabled
+check bash -lc 'test "$FH_PATH" = /usr/share/fedora-hypr'
+check grep -q 'wifi.backend=iwd' /etc/NetworkManager/conf.d/wifi-backend-iwd.conf
+check test "$(systemctl is-enabled iwd 2>/dev/null)" = enabled
+
 exit $fail
