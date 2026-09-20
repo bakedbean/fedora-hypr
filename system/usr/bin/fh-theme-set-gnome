@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+# Adapted from Omarchy (MIT) — https://github.com/basecamp/omarchy
+# Apply the current theme to GNOME/GTK colour scheme and icon settings.
+# Headless no-op: needs gsettings and a running session bus to be useful.
+set -uo pipefail
+
+theme="$HOME/.config/fedora-hypr/current/theme"
+
+command -v gsettings >/dev/null || exit 0
+[[ -n ${DBUS_SESSION_BUS_ADDRESS:-} || -n ${WAYLAND_DISPLAY:-} ]] || exit 0
+[[ -d $theme ]] || exit 0
+
+# A theme is light if it ships a light.mode marker (same convention as upstream), else if
+# its colors.toml background is brighter than mid-grey (relative luminance).
+is_light() {
+  [[ -f $theme/light.mode ]] && return 0
+  local bg
+  bg=$(sed -nE 's/^background[[:space:]]*=[[:space:]]*"#?([0-9a-fA-F]{6})".*/\1/p' "$theme/colors.toml" 2>/dev/null | head -1)
+  [[ -n $bg ]] || return 1
+  local r=$((16#${bg:0:2})) g=$((16#${bg:2:2})) b=$((16#${bg:4:2}))
+  (( (299 * r + 587 * g + 114 * b) / 1000 > 128 ))
+}
+
+if is_light; then
+  gsettings set org.gnome.desktop.interface color-scheme "prefer-light"
+  gsettings set org.gnome.desktop.interface gtk-theme "Adwaita"
+else
+  gsettings set org.gnome.desktop.interface color-scheme "prefer-dark"
+  gsettings set org.gnome.desktop.interface gtk-theme "Adwaita-dark"
+fi
+
+if [[ -f $theme/icons.theme ]]; then
+  gsettings set org.gnome.desktop.interface icon-theme "$(<"$theme/icons.theme")"
+else
+  gsettings set org.gnome.desktop.interface icon-theme "Yaru-blue"
+fi
+exit 0

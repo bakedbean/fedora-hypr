@@ -35,6 +35,8 @@ fh-restart-waybar
 fh-restart-swayosd
 fh-restart-mako
 fh-restart-hyprctl
+fh-restart-btop
+fh-theme-set-gnome
 
 hook="$state/hooks/theme-set"
 [[ -x $hook ]] && "$hook" "$name" >/dev/null
