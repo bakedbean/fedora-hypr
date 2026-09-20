@@ -1,2 +1,7 @@
 #!/usr/bin/env bash
-pgrep -x mako >/dev/null && makoctl reload; exit 0
+if pgrep -x mako >/dev/null; then
+  makoctl reload
+else
+  setsid uwsm-app -- mako >/dev/null 2>&1 &
+fi
+exit 0
