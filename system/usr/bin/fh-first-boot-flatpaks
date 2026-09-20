@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# First boot, step 2 (needs network): install the Flatpak apps listed in
+# /usr/share/fedora-hypr/flatpaks.txt. Each app is installed on its own so one bad
+# download does not block the rest; the unit retries (Restart=on-failure) until
+# every app is present, and only then writes flatpaks.done.
+set -uo pipefail
+
+list="${FH_FLATPAKS_LIST:-/usr/share/fedora-hypr/flatpaks.txt}"   # override for tests
+mapfile -t apps < <(grep -vE '^\s*(#|$)' "$list")
+
+failed=()
+for app in "${apps[@]}"; do
+  flatpak install -y --noninteractive --system flathub "$app" || failed+=("$app")
+done
+
+if ((${#failed[@]})); then
+  echo "fh-first-boot-flatpaks: failed to install: ${failed[*]} (will retry)" >&2
+  exit 1
+fi
+
+install -d /var/lib/fedora-hypr
+touch /var/lib/fedora-hypr/flatpaks.done
+echo "fh-first-boot-flatpaks: installed ${#apps[@]} apps"

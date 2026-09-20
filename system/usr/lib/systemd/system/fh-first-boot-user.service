@@ -1,0 +1,12 @@
+[Unit]
+Description=fedora-hypr first boot: create primary user and render default theme
+ConditionPathExists=!/var/lib/fedora-hypr/user.done
+Before=greetd.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/bin/fh-first-boot-user
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,15 @@
+[Unit]
+Description=fedora-hypr first boot: install Flatpak apps
+ConditionPathExists=!/var/lib/fedora-hypr/flatpaks.done
+After=network-online.target fh-first-boot-user.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/bin/fh-first-boot-flatpaks
+Restart=on-failure
+RestartSec=60
+
+[Install]
+WantedBy=multi-user.target

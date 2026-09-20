@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# First boot, step 1 (no network): create the primary user and render the default
+# theme into their HOME so the very first Hyprland session already has
+# ~/.config/fedora-hypr/current/{theme,background,theme.name}.
+# bootc does not ship /var, so anything under /var/home must be created here, not at build time.
+set -euo pipefail
+
+user="${FH_USER:-eben}"
+home="/var/home/$user"
+
+install -d -m 0755 /var/home
+
+if ! id "$user" &>/dev/null; then
+  useradd --create-home --home-dir "$home" --groups wheel --shell /usr/bin/fish "$user"
+  echo "$user:changeme" | chpasswd
+  chage --lastday 0 "$user"    # force password change at first login
+  echo "fh-first-boot-user: created user $user"
+fi
+
+# No WAYLAND_DISPLAY here, so no swaybg is spawned and every restart helper is a
+# pgrep-guarded no-op; fh-first-run (exec-once) remains the fallback if this is skipped.
+if [[ ! -f $home/.config/fedora-hypr/current/theme.name ]]; then
+  runuser -u "$user" -- env HOME="$home" FH_PATH=/usr/share/fedora-hypr FH_THEME_SKIP_BACKGROUND=0 \
+    fh-theme-set tokyo-night
+  echo "fh-first-boot-user: rendered default theme for $user"
+fi
+
+install -d /var/lib/fedora-hypr
+touch /var/lib/fedora-hypr/user.done

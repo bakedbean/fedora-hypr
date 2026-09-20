@@ -1,0 +1,35 @@
+#!/bin/bash
+# Adapted from Omarchy (MIT) — https://github.com/basecamp/omarchy
+#
+# Enrol a fingerprint for login, sudo, polkit and hyprlock. PAM is already wired
+# up in the image (authselect with-fingerprint) and hyprlock's fingerprint auth is
+# on by default, so this only needs to enrol and verify. Runs in a floating
+# terminal when launched from the menu (no args).
+
+if [[ $1 != "--run" ]]; then
+  exec fh-launch-floating-terminal-with-presentation "fh-setup-fingerprint --run"
+fi
+
+echo -e "\e[32mSetting up fingerprint scanner for authentication.\n\e[0m"
+
+if [[ -z $(fprintd-list "$USER" 2>/dev/null) ]]; then
+  echo -e "\e[31mNo fingerprint sensor detected.\e[0m"
+  exit 1
+fi
+
+echo -e "\e[32mLet's set up your right index finger as the first fingerprint.\e[0m"
+echo -e "Keep moving the finger around on the sensor until the process completes.\n"
+
+if fprintd-enroll "$USER"; then
+  echo -e "\e[32m\nFingerprint enrolled successfully!\e[0m"
+  echo -e "\nNow let's verify that it's working correctly.\n"
+  if fprintd-verify; then
+    echo -e "\e[32m\nPerfect! Fingerprint authentication is now configured.\e[0m"
+    echo "You can use your fingerprint for login, sudo, polkit and the lock screen (Super + Ctrl + L)."
+  else
+    echo -e "\e[31m\nVerification failed. You may want to try enrolling again.\e[0m"
+  fi
+else
+  echo -e "\e[31m\nEnrolment failed. Please try again.\e[0m"
+  exit 1
+fi
