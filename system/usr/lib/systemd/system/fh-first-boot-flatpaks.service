@@ -5,8 +5,9 @@ After=network-online.target fh-first-boot-user.service
 Wants=network-online.target
 
 [Service]
-Type=oneshot
-RemainAfterExit=yes
+# simple, not oneshot: a oneshot wanted by multi-user.target holds that target (and
+# graphical.target, so uwsm's session start) until the downloads finish.
+Type=simple
 ExecStart=/usr/bin/fh-first-boot-flatpaks
 Restart=on-failure
 RestartSec=60

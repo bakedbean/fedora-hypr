@@ -57,6 +57,8 @@ check grep -q '^Before=greetd.service' /usr/lib/systemd/system/fh-first-boot-use
 check bash -c '! grep -q network /usr/lib/systemd/system/fh-first-boot-user.service'
 check grep -q '^After=network-online.target fh-first-boot-user.service' /usr/lib/systemd/system/fh-first-boot-flatpaks.service
 check grep -q '^Restart=on-failure' /usr/lib/systemd/system/fh-first-boot-flatpaks.service
+check grep -q '^Type=simple' /usr/lib/systemd/system/fh-first-boot-flatpaks.service
+check grep -q '^Type=oneshot' /usr/lib/systemd/system/fh-first-boot-user.service
 check bash -c 'FH_USER=testuser fh-first-boot-user && id -nG testuser | grep -qw wheel && test -d /var/home/testuser'
 # password is NOT expired (tuigreet cannot run the PAM change conversation); a marker drives fh-setup-password instead
 check bash -c '! grep -q "chage" /usr/bin/fh-first-boot-user'

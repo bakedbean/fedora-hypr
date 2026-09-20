@@ -42,7 +42,7 @@ exec qemu-system-x86_64 -enable-kvm -m 4096 -smp 4 -cpu host \
   -drive if=pflash,format=raw,readonly=on,file="$OVMF_CODE" \
   -drive if=pflash,format=raw,file=vm/OVMF_VARS.fd \
   -drive file="$DISK",format=raw,if=virtio \
-  -device virtio-gpu-gl -display gtk,gl=on \
+  -vga none -device virtio-gpu-gl -display gtk,gl=on \
   -device virtio-keyboard -device virtio-tablet \
   -netdev user,id=n0 -device virtio-net-pci,netdev=n0 \
   -audiodev pipewire,id=a0 -device intel-hda -device hda-output,audiodev=a0 \

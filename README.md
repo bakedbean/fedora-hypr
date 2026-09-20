@@ -49,8 +49,9 @@ always tracks the base image's Fedora version (currently `44`).
   -monitor stdio` → `sendkey ?`). Once Hyprland is running in the guest, Ctrl+Alt+Fn VT switching
   from the QEMU window no longer works because the compositor owns input; use the monitor
   (`sendkey ctrl-alt-f2`) or read `vm/serial.log` instead.
-- Boots with UEFI (OVMF), virtio-gpu (GL), 4 GB RAM, virtio net/keyboard/tablet, and a pipewire audio
-  device. OVMF firmware paths default to the Arch locations
+- Boots with UEFI (OVMF), virtio-gpu (GL) as the only GPU (`-vga none`; with QEMU's default VGA
+  card also present Hyprland renders on the wrong DRM card and the window stays black), 4 GB RAM,
+  virtio net/keyboard/tablet, and a pipewire audio device. OVMF firmware paths default to the Arch locations
   (`/usr/share/edk2/x64/OVMF_{CODE,VARS}.4m.fd`) and can be overridden with the `OVMF_CODE` /
   `OVMF_VARS` env vars on other distros.
 - Expected boot sequence: GRUB → Plymouth → tuigreet on tty1. Log in, set a password → Hyprland with
