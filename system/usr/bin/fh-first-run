@@ -1,9 +1,20 @@
 #!/usr/bin/env bash
-# Runs once per user from Hyprland exec-once: pick the default theme and seed state dirs.
-set -euo pipefail
-marker="$HOME/.local/state/fedora-hypr/first-run.done"
-[[ -f $marker ]] && exit 0
-mkdir -p "$HOME/.local/state/fedora-hypr/toggles/hypr" "$HOME/.config/fedora-hypr/current"
-xdg-user-dirs-update
-[[ -f $HOME/.config/fedora-hypr/current/theme.name ]] || fh-theme-set tokyo-night
-touch "$marker"
+# Runs from Hyprland exec-once. Once per user: pick the default theme and seed state
+# dirs. Every login until done: prompt for a new password if first boot left the
+# default one in place.
+set -uo pipefail
+state="$HOME/.local/state/fedora-hypr"
+marker="$state/first-run.done"
+
+if [[ ! -f $marker ]]; then
+  mkdir -p "$state/toggles/hypr" "$HOME/.config/fedora-hypr/current"
+  xdg-user-dirs-update
+  [[ -f $HOME/.config/fedora-hypr/current/theme.name ]] || fh-theme-set tokyo-night
+  touch "$marker"
+fi
+
+# After the theme step so the terminal is themed; nothing else waits on this.
+if [[ -f $state/password-change-pending ]]; then
+  fh-launch-floating-terminal-with-presentation fh-setup-password
+fi
+exit 0

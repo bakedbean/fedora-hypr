@@ -12,7 +12,7 @@ fi
 
 echo -e "\e[32mSetting up fingerprint scanner for authentication.\n\e[0m"
 
-if [[ -z $(fprintd-list "$USER" 2>/dev/null) ]]; then
+if fprintd-list "$USER" 2>&1 | grep -qi 'no devices'; then
   echo -e "\e[31mNo fingerprint sensor detected.\e[0m"
   exit 1
 fi

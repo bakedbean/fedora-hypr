@@ -27,7 +27,8 @@ if [[ ! -f $DISK || ${FRESH:-0} == 1 ]]; then
     podman save "$IMAGE" | sudo podman load
   sudo podman run --rm --privileged --pid=host --security-opt label=type:unconfined_t \
     -v /dev:/dev -v /var/lib/containers:/var/lib/containers -v "$PWD/vm:/vm" \
-    "$IMAGE" bootc install to-disk --via-loopback --wipe --filesystem btrfs --generic-image "/vm/$(basename "$tmp")"
+    "$IMAGE" bootc install to-disk --via-loopback --wipe --filesystem btrfs --generic-image \
+      --karg console=ttyS0,115200 --karg console=tty0 "/vm/$(basename "$tmp")"
   sudo chown "$USER" "$tmp"; mv "$tmp" "$DISK"; trap - ERR
 fi
 [[ -f vm/OVMF_VARS.fd ]] || cp "$OVMF_VARS" vm/OVMF_VARS.fd

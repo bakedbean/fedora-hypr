@@ -13,7 +13,12 @@ install -d -m 0755 /var/home
 if ! id "$user" &>/dev/null; then
   useradd --create-home --home-dir "$home" --groups wheel --shell /usr/bin/fish "$user"
   echo "$user:changeme" | chpasswd
-  chage --lastday 0 "$user"    # force password change at first login
+  # Don't expire the password: greetd/tuigreet cannot run PAM's change-password
+  # conversation (pam_acct_mgmt: NEW_AUTHTOK_REQD → login fails). Instead leave a
+  # marker that fh-first-run turns into a themed fh-setup-password prompt.
+  install -d -o "$user" -g "$user" -m 0700 "$home/.local/state/fedora-hypr"
+  touch "$home/.local/state/fedora-hypr/password-change-pending"
+  chown "$user:$user" "$home/.local/state/fedora-hypr/password-change-pending"
   echo "fh-first-boot-user: created user $user"
 fi
 

@@ -2,7 +2,7 @@
 # Adapted from Omarchy (MIT) — https://github.com/basecamp/omarchy
 #
 # Trimmed for fedora-hypr: keeps only Apps, Learn, Trigger (Capture, Toggle),
-# Style (Theme, Background), Setup (Wifi, Bluetooth, Audio, Power profile, Fingerprint),
+# Style (Theme, Background), Setup (Wifi, Bluetooth, Audio, Power profile, Fingerprint, Password),
 # Update, and System (Lock, Suspend, Restart, Shutdown, Reboot to firmware).
 # Everything Arch/Fedora-install-specific (Install, Remove, About, Hardware,
 # Reminder, Share, Font, Screensaver, Setup->Defaults/Config/Security/System)
@@ -112,12 +112,13 @@ show_background_menu() {
 }
 
 show_setup_menu() {
-  case $(menu "Setup" "  Wifi\n󰂯  Bluetooth\n  Audio\n󱐋  Power Profile\n󰈷  Fingerprint") in
+  case $(menu "Setup" "  Wifi\n󰂯  Bluetooth\n  Audio\n󱐋  Power Profile\n󰈷  Fingerprint\n  Password") in
   *Wifi*) fh-launch-wifi ;;
   *Bluetooth*) fh-launch-bluetooth ;;
   *Audio*) fh-launch-audio ;;
   *Power*) show_setup_power_menu ;;
   *Fingerprint*) fh-setup-fingerprint ;;
+  *Password*) present_terminal fh-setup-password ;;
   *) show_main_menu ;;
   esac
 }

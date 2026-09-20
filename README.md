@@ -35,7 +35,9 @@ always tracks the base image's Fedora version (currently `44`).
 - Later runs: boot the existing `vm/disk.raw` as-is (no reinstall).
 - `FRESH=1 make vm`: force a wipe and reinstall to `vm/disk.raw` even if it already exists — use this
   after rebuilding the image to pick up changes.
-- Exposes a QEMU monitor on `vm/monitor.sock` and logs the guest serial console to `vm/serial.log`.
+- Exposes a QEMU monitor on `vm/monitor.sock` and logs the guest serial console to `vm/serial.log`
+  (the install adds `console=ttyS0,115200 console=tty0` kargs, so the kernel/systemd boot log and
+  unit failures land there — `tail -f vm/serial.log`).
   Your host's Hyprland intercepts SUPER combos before QEMU sees them, so inject keys through the
   monitor instead, e.g. to open a terminal with SUPER+RETURN in the guest:
   ```
@@ -83,14 +85,16 @@ on pulls new layers of that image.
 
 ## First login
 
-The disk boots to tuigreet on tty1. Log in as `eben` with password `changeme`; you are forced to pick a
-new password before the Hyprland session starts. The user and its default theme are created by
-`fh-first-boot-user.service` before greetd comes up, so the first session already has its colours and
-wallpaper. The Flatpak apps in `system/usr/share/fedora-hypr/flatpaks.txt` (Signal, Spotify, Obsidian,
+The disk boots to tuigreet on tty1. Log in as `eben` with password `changeme`. Once Hyprland is up, a
+floating terminal prompts you to change it (`fh-setup-password`; also under Setup → Password in
+`fh-menu`) — the password is not expired at the PAM level because tuigreet cannot run the
+change-password conversation. SSH is disabled by default, so the window with the default password is
+local-only. The user and its default theme are created by `fh-first-boot-user.service` before greetd
+comes up, so the first session already has its colours and wallpaper. The Flatpak apps in `system/usr/share/fedora-hypr/flatpaks.txt` (Signal, Spotify, Obsidian,
 1Password, …) are installed in the background by `fh-first-boot-flatpaks.service` once the network is
 up; it retries every minute until every app is present. Watch it with
-`journalctl -fu fh-first-boot-flatpaks`. SSH is disabled by default (`sudo systemctl enable --now sshd`
-to turn it on).
+`journalctl -fu fh-first-boot-flatpaks`. To turn SSH on: `sudo systemctl enable --now sshd` (a
+`system-preset` keeps it off across the first-boot `preset-all`).
 
 **Fingerprint:** PAM is already configured for fingerprint auth (login, sudo, polkit, hyprlock). Run
 `fh-setup-fingerprint` (or Setup → Fingerprint in the `fh-menu`) to enrol a finger.
@@ -131,6 +135,7 @@ fedora-hypr/
 │   ├── usr/share/wayland-sessions/ # fedora-hypr.desktop (session entry for greetd)
 │   ├── usr/lib/systemd/system/    # fh-first-boot-user.service, fh-first-boot-flatpaks.service
 │   ├── usr/lib/tmpfiles.d/        # /var/cache/tuigreet
+│   ├── usr/lib/systemd/system-preset/ # keep sshd/getty@tty1 disabled through first-boot preset-all
 │   └── etc/
 │       ├── skel/.config/          # thin per-user config seeded on first login, sources the defaults
 │       │                            # (hypridle.conf / hyprlock.conf live here: both only search ~/.config/hypr)

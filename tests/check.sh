@@ -40,6 +40,10 @@ check bash -lc 'test "$FH_PATH" = /usr/share/fedora-hypr'
 check grep -q 'wifi.backend=iwd' /etc/NetworkManager/conf.d/wifi-backend-iwd.conf
 check test "$(systemctl is-enabled iwd 2>/dev/null)" = enabled
 check test "$(systemctl is-enabled sshd 2>/dev/null)" = disabled
+# first boot runs preset-all (empty machine-id); our preset must win over 90-default's "enable sshd"
+check test -f /usr/lib/systemd/system-preset/05-fedora-hypr.preset
+check grep -q '^disable sshd.service' /usr/lib/systemd/system-preset/05-fedora-hypr.preset
+check grep -q '^disable getty@tty1.service' /usr/lib/systemd/system-preset/05-fedora-hypr.preset
 check grep -q pam_fprintd /etc/pam.d/system-auth
 check grep -q 'fingerprint:enabled = true' /etc/skel/.config/hypr/hyprlock.conf
 check grep -q 'FH_PATH /usr/share/fedora-hypr' /etc/fish/conf.d/fedora-hypr.fish
@@ -54,6 +58,13 @@ check bash -c '! grep -q network /usr/lib/systemd/system/fh-first-boot-user.serv
 check grep -q '^After=network-online.target fh-first-boot-user.service' /usr/lib/systemd/system/fh-first-boot-flatpaks.service
 check grep -q '^Restart=on-failure' /usr/lib/systemd/system/fh-first-boot-flatpaks.service
 check bash -c 'FH_USER=testuser fh-first-boot-user && id -nG testuser | grep -qw wheel && test -d /var/home/testuser'
+# password is NOT expired (tuigreet cannot run the PAM change conversation); a marker drives fh-setup-password instead
+check bash -c '! grep -q "chage" /usr/bin/fh-first-boot-user'
+check test -x /usr/bin/fh-setup-password
+check test -f /var/home/testuser/.local/state/fedora-hypr/password-change-pending
+check test "$(stat -c %U /var/home/testuser/.local/state/fedora-hypr/password-change-pending)" = testuser
+check grep -q fh-setup-password /usr/bin/fh-first-run
+check grep -q fh-setup-password /usr/bin/fh-menu
 # the theme is rendered into the new HOME before any Hyprland session, as that user
 check bash -c 'test "$(cat /var/home/testuser/.config/fedora-hypr/current/theme.name)" = tokyo-night'
 check test -L /var/home/testuser/.config/fedora-hypr/current/background
