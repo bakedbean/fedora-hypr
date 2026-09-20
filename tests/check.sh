@@ -47,4 +47,19 @@ check grep -q '^Restart=on-failure' /usr/lib/systemd/system/fh-first-boot.servic
 # --- Task 5: theme engine
 check bash /tests/theme_test.sh
 
+# --- Task 6: default config + skel
+# Hyprland refuses to run as root without --i-am-really-stupid, and needs
+# XDG_RUNTIME_DIR set even for a headless --verify-config; check.sh runs as
+# root in the build container, so both are supplied here.
+check bash -c '
+  export HOME=$(mktemp -d); cp -r /etc/skel/. "$HOME"; export FH_PATH=/usr/share/fedora-hypr
+  export XDG_RUNTIME_DIR=$(mktemp -d); chmod 700 "$XDG_RUNTIME_DIR"
+  FH_THEME_SKIP_BACKGROUND=1 fh-theme-set tokyo-night
+  Hyprland --verify-config --i-am-really-stupid'
+check bash -c '! grep -rl omarchy /usr/share/fedora-hypr/default /etc/skel | grep -v LICENSE'
+check test -f /usr/share/fedora-hypr/default/mako/core.ini
+check grep -q "fedora-hypr/current/theme/alacritty.toml" /etc/skel/.config/alacritty/alacritty.toml
+check bash -c 'sed "s|//.*||" /usr/share/fedora-hypr/default/waybar/config.jsonc | jq .'
+check bash -c 'sed "s|//.*||" /etc/skel/.config/waybar/config.jsonc | jq .'
+
 exit $fail

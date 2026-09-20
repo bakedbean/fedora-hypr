@@ -1,0 +1,7 @@
+/* Your Waybar style. Defaults live in /usr/share/fedora-hypr/default/waybar/. */
+@import "/usr/share/fedora-hypr/default/waybar/style.css";
+
+/* GTK CSS @import does not expand "~", so the current-theme colors referenced
+   by the default stylesheet above are pulled in here instead, relative to
+   this file's own location under your home directory. */
+@import "../fedora-hypr/current/theme/waybar.css";

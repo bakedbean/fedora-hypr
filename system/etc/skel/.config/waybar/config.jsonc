@@ -1,0 +1,3 @@
+// Your Waybar config. Defaults live in /usr/share/fedora-hypr/default/waybar/.
+// To customise, copy that file here and edit — this include is replaced entirely.
+{ "include": "/usr/share/fedora-hypr/default/waybar/config.jsonc" }
