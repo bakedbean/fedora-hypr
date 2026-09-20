@@ -1,5 +1,5 @@
 [Desktop Entry]
-Name=Hyprland (uwsm)
+Name=fedora-hypr (Hyprland via uwsm)
 Comment=Hyprland managed by uwsm
 Exec=Hyprland
 Type=Application

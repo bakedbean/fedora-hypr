@@ -2,5 +2,5 @@
 vt = 1
 
 [default_session]
-command = "tuigreet --time --remember --asterisks --cmd 'uwsm start -- hyprland-uwsm.desktop'"
-user = "greeter"
+command = "tuigreet --time --remember --asterisks --cmd 'uwsm start -- fedora-hypr.desktop'"
+user = "greetd"
