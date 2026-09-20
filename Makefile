@@ -3,7 +3,7 @@ TAG     ?= $(shell sed -n 's/^FROM .*:\([0-9]*\)$$/\1/p' Containerfile)
 REMOTE  ?= ghcr.io/bakedbean/fedora-hypr
 PODMAN  ?= podman
 
-.PHONY: build shell check push
+.PHONY: build shell check push vm
 
 build:
 	$(PODMAN) build -t $(IMAGE):$(TAG) .
@@ -17,3 +17,6 @@ check: build
 push: build
 	$(PODMAN) tag $(IMAGE):$(TAG) $(REMOTE):$(TAG)
 	$(PODMAN) push $(REMOTE):$(TAG)
+
+vm: build
+	IMAGE=$(IMAGE):$(TAG) ./vm.sh
