@@ -99,10 +99,11 @@ fedora-hypr/
 ├── system/                     # copied verbatim onto / in the image (COPY system/ /)
 │   ├── usr/bin/fh-*             # helper scripts (theming, launchers, toggles, first-boot, update, …)
 │   ├── usr/share/fedora-hypr/
-│   │   ├── default/               # canonical hypr/waybar/mako/swaybg/hyprlock/hypridle configs
+│   │   ├── default/               # canonical hypr/waybar/mako/swayosd/hyprlock/hypridle configs
 │   │   ├── themed/                # theme-parameterized templates (*.tpl)
 │   │   ├── themes/<name>/         # ported theme color definitions
 │   │   └── flatpaks.txt           # Flatpaks installed by fh-first-boot
+│   ├── usr/share/wayland-sessions/ # hyprland-uwsm.desktop (session entry for greetd)
 │   ├── usr/lib/systemd/system/    # fh-first-boot.service
 │   └── etc/
 │       ├── skel/.config/          # thin per-user config seeded on first login, sources the defaults

@@ -20,10 +20,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Derive tag from Containerfile
-        run: echo "TAG=$(sed -n 's/^FROM .*:\([0-9]*\)$/\1/p' Containerfile)" >> "$GITHUB_ENV"
+        run: |
+          echo "TAG=$(sed -n 's/^FROM .*:\([0-9]*\)$/\1/p' Containerfile)" >> "$GITHUB_ENV"
+          echo "DATE=$(date +%Y%m%d)" >> "$GITHUB_ENV"
       - name: Build
         run: |
-          sudo podman build -t "$IMAGE:$TAG" -t "$IMAGE:$TAG-$(date +%Y%m%d)" .
+          sudo podman build -t "$IMAGE:$TAG" -t "$IMAGE:$TAG-$DATE" .
       - name: Self-check
         run: sudo podman run --rm -v ./tests:/tests:ro "$IMAGE:$TAG" bash /tests/check.sh
       - name: Login
@@ -31,4 +33,4 @@ jobs:
       - name: Push
         run: |
           sudo podman push "$IMAGE:$TAG"
-          sudo podman push "$IMAGE:$TAG-$(date +%Y%m%d)"
+          sudo podman push "$IMAGE:$TAG-$DATE"

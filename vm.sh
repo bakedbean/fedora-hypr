@@ -6,22 +6,27 @@ DISK="${DISK:-vm/disk.raw}"
 OVMF_CODE="${OVMF_CODE:-/usr/share/edk2/x64/OVMF_CODE.4m.fd}"
 OVMF_VARS="${OVMF_VARS:-/usr/share/edk2/x64/OVMF_VARS.4m.fd}"
 
-if [[ ! -f $OVMF_CODE ]]; then
-  echo "OVMF firmware not found at $OVMF_CODE." >&2
-  echo "Install it with: sudo pacman -S --needed qemu-desktop edk2-ovmf" >&2
-  echo "(or set OVMF_CODE/OVMF_VARS to point at your distro's paths)" >&2
-  exit 1
-fi
+for f in "$OVMF_CODE" "$OVMF_VARS"; do
+  if [[ ! -f $f ]]; then
+    echo "OVMF firmware not found at $f." >&2
+    echo "Install it with: sudo pacman -S --needed qemu-desktop edk2-ovmf" >&2
+    echo "(or set OVMF_CODE/OVMF_VARS to point at your distro's paths)" >&2
+    exit 1
+  fi
+done
 
 mkdir -p vm
 if [[ ! -f $DISK || ${FRESH:-0} == 1 ]]; then
-  rm -f "$DISK"; truncate -s 20G "$DISK"
+  # Install into a temp file and only rename on success, so a failed install
+  # never leaves a bootable-looking $DISK behind.
+  tmp="$DISK.tmp"; rm -f "$tmp"; truncate -s 20G "$tmp"
+  trap 'rm -f "$tmp"' ERR
   # rootful podman needs its own copy of the image; load it from the rootless store once.
   sudo podman image exists "$IMAGE" || podman save "$IMAGE" | sudo podman load
   sudo podman run --rm --privileged --pid=host --security-opt label=type:unconfined_t \
     -v /dev:/dev -v /var/lib/containers:/var/lib/containers -v "$PWD/vm:/vm" \
-    "$IMAGE" bootc install to-disk --via-loopback --wipe --filesystem btrfs --generic-image "/vm/$(basename "$DISK")"
-  sudo chown "$USER" "$DISK"
+    "$IMAGE" bootc install to-disk --via-loopback --wipe --filesystem btrfs --generic-image "/vm/$(basename "$tmp")"
+  sudo chown "$USER" "$tmp"; mv "$tmp" "$DISK"; trap - ERR
 fi
 [[ -f vm/OVMF_VARS.fd ]] || cp "$OVMF_VARS" vm/OVMF_VARS.fd
 
