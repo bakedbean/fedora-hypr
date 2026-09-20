@@ -1,6 +1,7 @@
 #!/bin/bash
 # Adapted from Omarchy (MIT) — https://github.com/basecamp/omarchy
 
+: "${FH_PATH:=/usr/share/fedora-hypr}"
 
 ENABLED_NOTIFICATION=""
 DISABLED_NOTIFICATION=""
