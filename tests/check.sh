@@ -68,5 +68,6 @@ check bash -c '! grep -q dbus-update-activation-environment /usr/share/fedora-hy
 
 # --- Task 7: helper scripts
 check bash /tests/scripts_test.sh
+check grep -q 'exec-once = uwsm-app -- elephant' /usr/share/fedora-hypr/default/hypr/autostart.conf
 
 exit $fail

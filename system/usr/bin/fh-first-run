@@ -4,5 +4,6 @@ set -euo pipefail
 marker="$HOME/.local/state/fedora-hypr/first-run.done"
 [[ -f $marker ]] && exit 0
 mkdir -p "$HOME/.local/state/fedora-hypr/toggles/hypr" "$HOME/.config/fedora-hypr/current"
+xdg-user-dirs-update
 [[ -f $HOME/.config/fedora-hypr/current/theme.name ]] || fh-theme-set tokyo-night
 touch "$marker"

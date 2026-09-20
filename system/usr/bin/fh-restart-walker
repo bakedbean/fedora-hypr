@@ -10,7 +10,12 @@ restart_services() {
   if systemctl --user is-enabled app-walker@autostart.service &>/dev/null; then
     systemctl --user restart app-walker@autostart.service
   else
-    echo -e "\e[31mUnable to restart Walker -- RESTART MANUALLY\e[0m"
+    # Not systemd-managed here (see fh-launch-walker) -- restart the same way it starts things.
+    pkill -x elephant
+    pkill -f 'walker --gapplication-service'
+    sleep 0.3
+    setsid uwsm-app -- elephant &
+    setsid uwsm-app -- env GSK_RENDERER=cairo walker --gapplication-service &
   fi
 }
 

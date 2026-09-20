@@ -159,7 +159,10 @@ main() {
   input="${positional[0]:-}"
   format="${positional[1]:-}"
   resolution="${positional[2]:-}"
-  search_path="${search_path:-$HOME/Pictures:$HOME/Videos}"
+  if [[ -z $search_path ]]; then
+    mkdir -p "$HOME/Pictures" "$HOME/Videos"
+    search_path="$HOME/Pictures:$HOME/Videos"
+  fi
 
   if [[ -z $input ]]; then
     input=$(fh-menu-file "Transcode picture or video" "$search_path" "jpg jpeg png webp gif heic avif mp4 mov m4v mkv webm avi")

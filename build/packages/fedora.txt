@@ -32,6 +32,7 @@ upower
 tesseract
 socat
 ffmpeg
+xdg-user-dirs
 # terminal + cli
 alacritty
 fish

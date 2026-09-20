@@ -18,8 +18,8 @@
 OUTPUT_DIR="${FH_SCREENRECORD_DIR:-${XDG_VIDEOS_DIR:-$HOME/Videos}}"
 
 if [[ ! -d $OUTPUT_DIR ]]; then
-  notify-send "Screen recording directory does not exist: $OUTPUT_DIR" -u critical -t 3000
-  exit 1
+  mkdir -p "$OUTPUT_DIR"
+  notify-send "Created screen recording directory: $OUTPUT_DIR" -u normal -t 2000
 fi
 
 DESKTOP_AUDIO="false"
