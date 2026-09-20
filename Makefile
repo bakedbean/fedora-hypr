@@ -1,5 +1,5 @@
 IMAGE   ?= localhost/fedora-hypr
-TAG     ?= 44
+TAG     ?= $(shell sed -n 's/^FROM .*:\([0-9]*\)$$/\1/p' Containerfile)
 REMOTE  ?= ghcr.io/bakedbean/fedora-hypr
 PODMAN  ?= podman
 
