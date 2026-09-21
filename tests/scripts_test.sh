@@ -38,7 +38,7 @@ command -v xdg-user-dirs-update >/dev/null && echo "PASS xdg-user-dirs-update pr
 for b in hyprshot satty gpu-screen-recorder slurp grim wl-copy hyprpicker notify-send \
          mpv ffmpeg ffprobe v4l2-ctl tesseract magick xdg-terminal-exec uwsm-app \
          swayosd-client swayosd-server impala bluetui wiremix gum socat xkbcli upower \
-         bootc flatpak elephant walker; do
+         bootc skopeo flatpak elephant walker; do
   command -v "$b" >/dev/null && echo "PASS command -v $b" || { echo "FAIL missing command $b"; fail=1; }
 done
 exit $fail

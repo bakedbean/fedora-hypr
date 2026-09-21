@@ -71,6 +71,11 @@ tooltip {
   padding: 0;
 }
 
+#custom-update {
+  min-width: 12px;
+  margin: 0 7.5px;
+}
+
 .hidden {
   opacity: 0;
 }

@@ -6,7 +6,7 @@
   "spacing": 0,
   "height": 26,
   "modules-left": ["custom/menu", "hyprland/workspaces"],
-  "modules-center": ["clock", "custom/weather", "custom/screenrecording-indicator", "custom/idle-indicator", "custom/notification-silencing-indicator"],
+  "modules-center": ["clock", "custom/weather", "custom/update", "custom/screenrecording-indicator", "custom/idle-indicator", "custom/notification-silencing-indicator"],
   "modules-right": [
     "group/tray-expander",
     "bluetooth",
@@ -65,6 +65,14 @@
     "interval": 60,
     "tooltip": false,
     "on-click": "notify-send -u low \"$(fh-weather-status)\""
+  },
+  "custom/update": {
+    "format": "",
+    "exec": "fh-update-available",
+    "on-click": "fh-launch-floating-terminal-with-presentation fh-update",
+    "tooltip-format": "fedora-hypr update available — click to install",
+    "signal": 7,
+    "interval": 3600
   },
   "network": {
     "format-icons": ["󰤯", "󰤟", "󰤢", "󰤥", "󰤨"],

@@ -152,6 +152,14 @@ check test -f /usr/lib/systemd/user/podman.socket
 check test -f /etc/containers/nodocker
 check grep -q 'exec-once = systemctl --user start podman.socket' /usr/share/fedora-hypr/default/hypr/autostart.conf
 
+# --- Updates: fh-update-available (Waybar custom/update indicator, no host bootc deployment here)
+check command -v fh-update-available skopeo
+check grep -q '"custom/update"' /usr/share/fedora-hypr/default/waybar/config.jsonc
+# no bootc host in the build/check container: bootc status is unavailable, so the script must never
+# print a false positive here — exit 1, empty stdout
+check bash -c '[ -z "$(fh-update-available)" ]'
+check bash -c 'fh-update-available; test $? -eq 1'
+
 # --- GRUB drop-in (gfxterm + hidden menu)
 check test -f /usr/lib/bootupd/grub2-static/configs.d/05_terminal.cfg
 check grep -q "terminal_output gfxterm" /usr/lib/bootupd/grub2-static/configs.d/05_terminal.cfg

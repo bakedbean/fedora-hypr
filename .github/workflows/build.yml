@@ -4,7 +4,7 @@ on:
     branches: [main]
     paths-ignore: ['docs/**', 'README.md']
   schedule:
-    - cron: '30 5 * * *'   # daily, after ublue's base-main rebuild
+    - cron: '30 5 * * 0'   # weekly; push to main builds immediately; `gh workflow run build` on demand
   workflow_dispatch:
 
 permissions:

@@ -103,6 +103,10 @@ up; it retries every minute until every app is present. Watch it with
 
 ## Day 2
 
+- A Waybar icon (`custom/update`, `fh-update-available`) appears in the bar when an update is
+  available or already staged; click it to run `fh-update` in a floating terminal. It polls hourly
+  and on a Waybar refresh signal, caches its result for 10 minutes, and never shows a false
+  positive — no timer runs on the machine on its own, this is purely an indicator.
 - `fh-update` — pull and stage the latest image (wraps `bootc upgrade`); reboot to apply.
 - `sudo bootc rollback` — boot the previous deployment if an update regresses something; reboot to
   apply. `/home` is untouched by upgrades and rollbacks.
@@ -113,7 +117,8 @@ up; it retries every minute until every app is present. Watch it with
 
 `.github/workflows/build.yml` builds the image, runs `tests/check.sh` inside it, and pushes
 `ghcr.io/bakedbean/fedora-hypr:44` and `ghcr.io/bakedbean/fedora-hypr:44-YYYYMMDD` on every push to
-`main`, on a daily schedule (after ublue's `base-main` rebuilds), and on manual dispatch. The tag is
+`main`, on a weekly schedule (Sunday 05:30 UTC, after ublue's `base-main` rebuilds), and on manual
+dispatch (`gh workflow run build`). The tag is
 derived from the `Containerfile`'s `FROM` line the same way the `Makefile` derives it, so it's never
 hard-coded in the workflow.
 

@@ -284,6 +284,10 @@ if [[ -d $SRC/$wb ]]; then
       REWRITES+=("$wb/config.jsonc: removed module $mod")
     }
     drop_module custom/voxtype
+    # custom/update is kept (not dropped): the generic omarchy- -> fh- sed below already turns its
+    # exec/on-click into fh-update-available / fh-launch-floating-terminal-with-presentation fh-update;
+    # only its tooltip-format needs an explicit rewrite (see below). Fall back to dropping it if this
+    # image somehow doesn't ship the indicator.
     if ! in_image fh-update-available; then drop_module custom/update; fi
     # the menu button's glyph comes from the image's default config (the omarchy icon font is not shipped)
     menu_glyph=$(sed 's|//.*||' "$REPO/system/usr/share/fedora-hypr/default/waybar/config.jsonc" | jq -r '."custom/menu".format')
@@ -296,6 +300,26 @@ if [[ -d $SRC/$wb ]]; then
       -e "s|<span font='omarchy'>[^<]*</span>|$menu_glyph|g" \
       -e 's|Omarchy Menu|fedora-hypr Menu|g' \
       "$cfg"
+    # custom/update's tooltip-format is author prose (not an omarchy- prefixed command), so the
+    # generic sed above never touches it; rewrite it explicitly, in place if present, inserted as the
+    # module's first property otherwise.
+    if grep -q '"custom/update": {' "$cfg"; then
+      ttf='fedora-hypr update available — click to install'
+      if grep -A8 '"custom/update": {' "$cfg" | grep -q '"tooltip-format":'; then
+        awk -v ttf="$ttf" '
+          /^  "custom\/update": \{/ { inblk=1; print; next }
+          inblk && /"tooltip-format":/ { sub(/"tooltip-format": "[^"]*"/, "\"tooltip-format\": \"" ttf "\""); print; next }
+          inblk && /^  \},?$/ { inblk=0 }
+          { print }
+        ' "$cfg" > "$cfg.tmp" && mv "$cfg.tmp" "$cfg"
+      else
+        awk -v ttf="$ttf" '
+          /^  "custom\/update": \{/ { print; print "    \"tooltip-format\": \"" ttf "\","; next }
+          { print }
+        ' "$cfg" > "$cfg.tmp" && mv "$cfg.tmp" "$cfg"
+      fi
+      REWRITES+=("$wb/config.jsonc: custom/update tooltip-format -> '$ttf'")
+    fi
     rewrite_home_paths "$cfg"
     # Fedora's Firefox has window class org.mozilla.firefox: give every "class<firefox>" window-rewrite rule a
     # sibling for it with the same glyph (kept alongside; skipped when the rule already exists)

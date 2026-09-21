@@ -1,0 +1,74 @@
+#!/usr/bin/env bash
+# Waybar custom/update exec: prints one word and exits 0 when an update is available or
+# already staged; prints nothing and exits 1 otherwise (Waybar hides a custom module whose
+# exec produces empty output). Never prints a false positive: any error is logged to stderr
+# and treated as "up to date".
+set -uo pipefail
+
+CACHE=${XDG_RUNTIME_DIR:-/tmp}/fh-update-available
+CACHE_TTL=600 # seconds; keeps a pkill -RTMIN+7 waybar refresh storm off the registry
+
+emit() {
+  # $1: staged|available|none
+  printf '%s %s\n' "$(date +%s)" "$1" >"$CACHE" 2>/dev/null || true
+  case $1 in
+  staged | available)
+    echo "$1"
+    exit 0
+    ;;
+  *)
+    exit 1
+    ;;
+  esac
+}
+
+if [[ -f $CACHE ]]; then
+  cache_ts=
+  cache_result=
+  read -r cache_ts cache_result <"$CACHE" 2>/dev/null || true
+  if [[ $cache_ts =~ ^[0-9]+$ ]] && (($(date +%s) - cache_ts < CACHE_TTL)); then
+    case $cache_result in
+    staged | available)
+      echo "$cache_result"
+      exit 0
+      ;;
+    *) exit 1 ;;
+    esac
+  fi
+fi
+
+status=$(bootc status --format json 2>/dev/null) || status=$(sudo -n bootc status --format json 2>/dev/null) || status=
+if [[ -z $status ]]; then
+  echo "fh-update-available: bootc status unavailable (needs root; no passwordless sudo configured)" >&2
+  emit none
+fi
+
+staged=$(jq -r '.status.staged // empty' <<<"$status" 2>/dev/null)
+if [[ -n $staged ]]; then
+  emit staged
+fi
+
+booted_ref=$(jq -r '.status.booted.image.image.image // empty' <<<"$status" 2>/dev/null)
+booted_digest=$(jq -r '.status.booted.image.imageDigest // empty' <<<"$status" 2>/dev/null)
+if [[ -z $booted_ref || -z $booted_digest ]]; then
+  echo "fh-update-available: no booted image ref/digest in bootc status" >&2
+  emit none
+fi
+
+remote=$(skopeo inspect --no-tags "docker://$booted_ref" 2>/dev/null)
+if [[ -z $remote ]]; then
+  echo "fh-update-available: skopeo inspect of $booted_ref failed (offline?)" >&2
+  emit none
+fi
+
+remote_digest=$(jq -r '.Digest // empty' <<<"$remote" 2>/dev/null)
+if [[ -z $remote_digest ]]; then
+  echo "fh-update-available: no .Digest in skopeo inspect output" >&2
+  emit none
+fi
+
+if [[ $remote_digest != "$booted_digest" ]]; then
+  emit available
+else
+  emit none
+fi

@@ -116,6 +116,8 @@ cat > "$src/.config/waybar/config.jsonc" <<EOF
     "format": "",
     "exec": "omarchy-update-available",
     "on-click": "omarchy-launch-floating-terminal-with-presentation omarchy-update",
+    "tooltip-format": "Omarchy update available",
+    "signal": 7,
     "interval": 21600
   },
   "custom/docker": {
@@ -289,8 +291,12 @@ wb=$home/.config/waybar
 check bash -c "sed 's|//.*||' '$wb/config.jsonc' | jq ."
 check bash -c "! grep -qi voxtype '$wb/config.jsonc'"
 check bash -c "! grep -qi omarchy '$wb/config.jsonc'"
-check bash -c "! grep -q 'custom/update' '$wb/config.jsonc'"
-check bash -c "sed 's|//.*||' '$wb/config.jsonc' | jq -e '.\"modules-center\" == [\"clock\", \"custom/idle-indicator\"]'"
+check bash -c "sed 's|//.*||' '$wb/config.jsonc' | jq -e '.\"modules-center\" == [\"clock\", \"custom/update\", \"custom/idle-indicator\"]'"
+check bash -c "sed 's|//.*||' '$wb/config.jsonc' | jq -e '.\"custom/update\".exec == \"fh-update-available\"'"
+check bash -c "sed 's|//.*||' '$wb/config.jsonc' | jq -e '.\"custom/update\".\"on-click\" == \"fh-launch-floating-terminal-with-presentation fh-update\"'"
+check bash -c "sed 's|//.*||' '$wb/config.jsonc' | jq -e '.\"custom/update\".\"tooltip-format\" == \"fedora-hypr update available — click to install\"'"
+check bash -c "sed 's|//.*||' '$wb/config.jsonc' | jq -e '.\"custom/update\".signal == 7'"
+check bash -c "sed 's|//.*||' '$wb/config.jsonc' | jq -e '.\"custom/update\".interval == 21600'"
 check bash -c "sed 's|//.*||' '$wb/config.jsonc' | jq -e '.\"modules-left\"[0] == \"custom/menu\"'"
 check bash -c "sed 's|//.*||' '$wb/config.jsonc' | jq -e '.\"custom/menu\".\"on-click\" == \"fh-menu\"'"
 menu_glyph=$(sed 's|//.*||' "$here/../system/usr/share/fedora-hypr/default/waybar/config.jsonc" | jq -r '."custom/menu".format')

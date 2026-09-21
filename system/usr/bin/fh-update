@@ -4,4 +4,6 @@ set -euo pipefail
 sudo bootc upgrade
 flatpak update -y --noninteractive
 sudo bootc status
+rm -f "${XDG_RUNTIME_DIR:-/tmp}/fh-update-available"
+pkill -RTMIN+7 waybar || true
 if gum confirm "Reboot now to activate the new image?"; then systemctl reboot; fi
