@@ -26,5 +26,6 @@ lazygit
 lazydocker
 mise
 gpu-screen-recorder
+python3-terminaltexteffects
 # whelanh/omarchy
 hyprland-preview-share-picker

@@ -8,4 +8,4 @@ gpgkey=https://download.copr.fedorainfracloud.org/results/agaspar/omedora-4/pubk
 repo_gpgcheck=0
 enabled=1
 enabled_metadata=1
-includepkgs=satty,starship,lazygit,lazydocker,mise,gpu-screen-recorder
+includepkgs=satty,starship,lazygit,lazydocker,mise,gpu-screen-recorder,python3-terminaltexteffects

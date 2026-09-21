@@ -17,6 +17,9 @@ if pgrep -x "1password" >/dev/null; then
   1password --lock &
 fi
 
+# Avoid running screensaver when locked
+pkill -f org.fedorahypr.screensaver
+
 if [[ ${FH_LOCK_ONLY:-false} != "true" ]]; then
   (
     sleep 3

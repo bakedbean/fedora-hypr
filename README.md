@@ -117,6 +117,12 @@ up; it retries every minute until every app is present. Watch it with
   `kargs.d` on install and reconciles it on upgrade, so installs made before the theme landed get the
   args with their next `fh-update`; if the splash still doesn't show, check with `rpm-ostree kargs` and
   add them once with `sudo rpm-ostree kargs --append=quiet --append=splash` (then reboot).
+- Screensaver: an Alacritty-based terminal screensaver (Omarchy's, animated by `tte` from
+  `terminaltexteffects`) starts after 2.5 minutes idle and shows the HYPEDORA wordmark
+  (`~/.config/fedora-hypr/branding/screensaver.txt`, seeded from `logo.txt`) with a random text
+  effect; the system locks 2 minutes after that. Toggle it off with Trigger → Toggle → Screensaver
+  in `fh-menu` (or `fh-toggle-screensaver`); edit or restore its wordmark with Style → Screensaver
+  (or `fh-branding-screensaver text|reset`).
 
 ## CI
 

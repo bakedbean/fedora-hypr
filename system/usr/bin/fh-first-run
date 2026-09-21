@@ -3,6 +3,7 @@
 # dirs. Every login until done: prompt for a new password if first boot left the
 # default one in place.
 set -uo pipefail
+: "${FH_PATH:=/usr/share/fedora-hypr}"
 state="$HOME/.local/state/fedora-hypr"
 marker="$state/first-run.done"
 
@@ -11,6 +12,12 @@ if [[ ! -f $marker ]]; then
   xdg-user-dirs-update
   [[ -f $HOME/.config/fedora-hypr/current/theme.name ]] || fh-theme-set tokyo-night
   touch "$marker"
+fi
+
+# HYPEDORA screensaver wordmark, unless the user already has one (fh-branding-screensaver reset restores it)
+if [[ ! -f $HOME/.config/fedora-hypr/branding/screensaver.txt ]]; then
+  mkdir -p "$HOME/.config/fedora-hypr/branding"
+  cp "$FH_PATH/logo.txt" "$HOME/.config/fedora-hypr/branding/screensaver.txt"
 fi
 
 # After the theme step so the terminal is themed; nothing else waits on this.

@@ -1,0 +1,4 @@
+#!/bin/bash
+# Adapted from Omarchy (MIT) — https://github.com/basecamp/omarchy
+
+hyprctl monitors -j | jq -r '.[] | select(.focused == true).name'

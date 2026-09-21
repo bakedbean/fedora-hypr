@@ -138,6 +138,25 @@ check grep -q fh-setup-fingerprint /usr/bin/fh-menu
 check bash /tests/scripts_test.sh
 check grep -q 'exec-once = uwsm-app -- elephant' /usr/share/fedora-hypr/default/hypr/autostart.conf
 
+# --- Screensaver: tte (terminaltexteffects) port of Omarchy's terminal screensaver
+check command -v tte fh-launch-screensaver fh-screensaver fh-toggle-screensaver fh-branding-screensaver
+check bash -c 'tte --version'
+check test -s /usr/share/fedora-hypr/logo.txt
+check bash -c '! grep -qi omarchy /usr/share/fedora-hypr/logo.txt'
+check test -f /etc/skel/.config/fedora-hypr/branding/screensaver.txt
+check bash -c 'diff -q /usr/share/fedora-hypr/logo.txt /etc/skel/.config/fedora-hypr/branding/screensaver.txt'
+check grep -q fh-launch-screensaver /etc/skel/.config/hypr/hypridle.conf
+check grep -q 'org.fedorahypr.screensaver' /usr/share/fedora-hypr/default/hypr/apps/screensaver.conf
+check grep -q 'apps/screensaver.conf' /usr/share/fedora-hypr/default/hypr/apps.conf
+check test -f /usr/share/fedora-hypr/default/alacritty/screensaver.toml
+check grep -q -- '--config-file /usr/share/fedora-hypr/default/alacritty/screensaver.toml' /usr/bin/fh-launch-screensaver
+check grep -q 'pkill -f org.fedorahypr.screensaver' /usr/bin/fh-system-lock
+check grep -q fh-toggle-screensaver /usr/bin/fh-menu
+check grep -q fh-branding-screensaver /usr/bin/fh-menu
+# tte can render the shipped logo without a tty (frame-rate 0 = no throttling, "print"
+# reveals the whole canvas and exits) -- a real behavioural check, not just --version
+check bash -c 'timeout 10 tte -i /usr/share/fedora-hypr/logo.txt --frame-rate 0 --no-eol print --final-gradient-stops ffffff </dev/null | grep -q .'
+
 # --- Rust binaries (rust-build stage) + direnv + podman socket for waybar-docker
 check command -v wsx
 check command -v waybar-docker

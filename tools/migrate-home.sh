@@ -480,6 +480,23 @@ if [[ -n $CURRENT_THEME && -d $SRC/.config/omarchy/current/theme/backgrounds ]];
   (( ${#EXTRA_BACKGROUNDS[@]} )) && TOUCHED+=("$fhc/backgrounds/$CURRENT_THEME")
 fi
 
+# --- 4c. screensaver branding: only migrate if the user customised it away from Omarchy's
+# stock wordmark (~/.local/share/omarchy/logo.txt) -- otherwise leave it unset so the image's
+# own HYPEDORA default (seeded by fh-first-run / skel) applies instead of Omarchy's OMARCHY art.
+ss_src=$SRC/.config/omarchy/branding/screensaver.txt
+ss_stock=$SRC/.local/share/omarchy/logo.txt
+if [[ -f $ss_src ]]; then
+  if [[ -f $ss_stock ]] && cmp -s "$ss_src" "$ss_stock"; then
+    echo "skipped $fhc/branding/screensaver.txt (unchanged from Omarchy's stock logo.txt; HYPEDORA default applies)"
+    SKIPPED+=("$fhc/branding/screensaver.txt")
+  else
+    mkdir -p "$STAGE/$fhc/branding"
+    cp -a "$ss_src" "$STAGE/$fhc/branding/screensaver.txt"
+    TOUCHED+=("$fhc/branding/screensaver.txt")
+    REWRITES+=(".config/omarchy/branding/screensaver.txt -> $fhc/branding/screensaver.txt (customised, copied as-is)")
+  fi
+fi
+
 # --- 5. plain copies (after every rewrite has succeeded: a refusal above must leave the target untouched)
 copy .zprofile
 copy .gitconfig

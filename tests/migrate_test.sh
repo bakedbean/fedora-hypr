@@ -392,4 +392,24 @@ ns=$tmp/src-ok; nd=$tmp/disk-ok; mkdir -p "$ns" "$nd/var/home/eben"; printf '# p
 check env SUDO_USER=fakeuser HOME="$ns" bash "$script" --dest "$nd" --no-split
 check grep -qx 'alias l=ls' "$nd/var/home/eben/.zshrc"
 
+# --- screensaver branding: migrated only when the user customised it away from Omarchy's
+# stock logo.txt; unchanged means the image's own HYPEDORA default (seeded by fh-first-run /
+# skel) should apply instead, so nothing is written.
+sb=$tmp/src-ssbrand; db=$tmp/disk-ssbrand
+mkdir -p "$sb/.config/omarchy/branding" "$sb/.local/share/omarchy" "$db/var/home/eben"
+printf 'STOCK LOGO\n' > "$sb/.local/share/omarchy/logo.txt"
+printf 'MY CUSTOM LOGO\n' > "$sb/.config/omarchy/branding/screensaver.txt"
+ssbrand_out=$tmp/ssbrand-out.txt
+env SUDO_USER=fakeuser HOME="$sb" bash "$script" --dest "$db" > "$ssbrand_out" 2>&1; ssbrand_rc=$?
+check test "$ssbrand_rc" -eq 0
+check grep -qx 'MY CUSTOM LOGO' "$db/var/home/eben/.config/fedora-hypr/branding/screensaver.txt"
+check grep -q 'branding/screensaver.txt (customised' "$ssbrand_out"
+
+sb2=$tmp/src-ssstock; db2=$tmp/disk-ssstock
+mkdir -p "$sb2/.config/omarchy/branding" "$sb2/.local/share/omarchy" "$db2/var/home/eben"
+printf 'STOCK LOGO\n' > "$sb2/.local/share/omarchy/logo.txt"
+printf 'STOCK LOGO\n' > "$sb2/.config/omarchy/branding/screensaver.txt"
+check env SUDO_USER=fakeuser HOME="$sb2" bash "$script" --dest "$db2"
+check bash -c "! test -e '$db2/var/home/eben/.config/fedora-hypr/branding/screensaver.txt'"
+
 exit $fail

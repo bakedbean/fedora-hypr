@@ -1,0 +1,23 @@
+#!/bin/bash
+# Adapted from Omarchy (MIT) — https://github.com/basecamp/omarchy
+#
+# Edit, or reset screensaver branding. The upstream `image` mode (transcoding a logo
+# image to ASCII art) is dropped here: fedora-hypr has no ASCII-art transcoder ported yet.
+
+set -euo pipefail
+
+: "${FH_PATH:=/usr/share/fedora-hypr}"
+
+case "${1:-}" in
+text)
+  fh-launch-editor ~/.config/fedora-hypr/branding/screensaver.txt >/dev/null 2>&1 && fh-launch-screensaver force >/dev/null 2>&1
+  ;;
+reset)
+  mkdir -p ~/.config/fedora-hypr/branding
+  cp "$FH_PATH/logo.txt" ~/.config/fedora-hypr/branding/screensaver.txt && fh-launch-screensaver force >/dev/null 2>&1
+  ;;
+*)
+  echo "Usage: fh-branding-screensaver <text|reset>" >&2
+  exit 1
+  ;;
+esac

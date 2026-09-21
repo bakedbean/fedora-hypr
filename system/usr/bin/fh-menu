@@ -2,10 +2,10 @@
 # Adapted from Omarchy (MIT) — https://github.com/basecamp/omarchy
 #
 # Trimmed for fedora-hypr: keeps only Apps, Learn, Trigger (Capture, Toggle),
-# Style (Theme, Background), Setup (Wifi, Bluetooth, Audio, Power profile, Fingerprint, Password),
-# Update, and System (Lock, Suspend, Restart, Shutdown, Reboot to firmware).
-# Everything Arch/Fedora-install-specific (Install, Remove, About, Hardware,
-# Reminder, Share, Font, Screensaver, Setup->Defaults/Config/Security/System)
+# Style (Theme, Background, Screensaver), Setup (Wifi, Bluetooth, Audio, Power profile,
+# Fingerprint, Password), Update, and System (Lock, Suspend, Restart, Shutdown, Reboot
+# to firmware). Everything Arch/Fedora-install-specific (Install, Remove, About, Hardware,
+# Reminder, Share, Font, Setup->Defaults/Config/Security/System)
 # was dropped rather than ported.
 
 # Set to true when going directly to a submenu, so we can exit directly
@@ -79,9 +79,10 @@ show_capture_menu() {
 }
 
 show_toggle_menu() {
-  local options="󰔎  Nightlight\n󱫖  Idle Lock\n󰂛  Notifications\n󰍜  Top Bar\n󱂬  Workspace Layout\n  Window Gaps\n  1-Window Ratio\n󰍹  Monitor Scaling\n󰟸  Touchpad"
+  local options="󱄄  Screensaver\n󰔎  Nightlight\n󱫖  Idle Lock\n󰂛  Notifications\n󰍜  Top Bar\n󱂬  Workspace Layout\n  Window Gaps\n  1-Window Ratio\n󰍹  Monitor Scaling\n󰟸  Touchpad"
 
   case $(menu "Toggle" "$options") in
+  *Screensaver*) fh-toggle-screensaver ;;
   *Nightlight*) fh-toggle-nightlight ;;
   *Idle*) fh-toggle-idle ;;
   *Notifications*) fh-toggle-notification-silencing ;;
@@ -96,9 +97,10 @@ show_toggle_menu() {
 }
 
 show_style_menu() {
-  case $(menu "Style" "󰸌  Theme\n  Background") in
+  case $(menu "Style" "󰸌  Theme\n  Background\n󱄄  Screensaver") in
   *Theme*) show_theme_menu ;;
   *Background*) show_background_menu ;;
+  *Screensaver*) show_screensaver_menu ;;
   *) show_main_menu ;;
   esac
 }
@@ -109,6 +111,14 @@ show_theme_menu() {
 
 show_background_menu() {
   fh-theme-bg-menu
+}
+
+show_screensaver_menu() {
+  case $(menu "Screensaver" "  Edit Text\n  Restore Default") in
+  *Text*) fh-branding-screensaver text ;;
+  *Default*) fh-branding-screensaver reset ;;
+  *) show_style_menu ;;
+  esac
 }
 
 show_setup_menu() {
