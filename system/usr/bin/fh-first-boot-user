@@ -11,7 +11,7 @@ home="/var/home/$user"
 install -d -m 0755 /var/home
 
 if ! id "$user" &>/dev/null; then
-  useradd --create-home --home-dir "$home" --groups wheel --shell /usr/bin/fish "$user"
+  useradd --create-home --home-dir "$home" --groups wheel --shell /usr/bin/zsh "$user"
   echo "$user:changeme" | chpasswd
   # Don't expire the password: greetd/tuigreet cannot run PAM's change-password
   # conversation (pam_acct_mgmt: NEW_AUTHTOK_REQD → login fails). Instead leave a

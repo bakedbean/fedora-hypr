@@ -142,7 +142,7 @@ fedora-hypr/
 │       ├── skel/.config/          # thin per-user config seeded on first login, sources the defaults
 │       │                            # (hypridle.conf / hyprlock.conf live here: both only search ~/.config/hypr)
 │       ├── greetd/config.toml     # tuigreet → uwsm start Hyprland
-│       └── ...                    # NetworkManager, environment.d, sudoers.d, profile.d, fish/conf.d
+│       └── ...                    # NetworkManager, environment.d, sudoers.d, profile.d
 ├── tests/                       # check.sh (in-image self-check) + scripts_test.sh, theme_test.sh, binds_test.sh
 ├── vm.sh                        # install-to-raw-disk + QEMU boot for local smoke testing
 ├── Makefile                     # build / shell / check / push / vm targets

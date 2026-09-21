@@ -9,7 +9,7 @@ for b in Hyprland hyprlock hypridle hyprpicker hyprsunset uwsm \
          walker elephant waybar mako swaybg grim slurp satty wl-copy \
          alacritty starship lazygit mise impala bluetui wiremix gum greetd tuigreet \
          gpu-screen-recorder hyprland-preview-share-picker firefox nautilus \
-         fish nvim btop bat eza fd rg zoxide jq dust tldr fastfetch magick \
+         zsh nvim btop bat eza fd rg zoxide jq dust tldr fastfetch magick \
          fcitx5 flatpak; do
   check command -v "$b"
 done
@@ -46,7 +46,7 @@ check grep -q '^disable sshd.service' /usr/lib/systemd/system-preset/05-fedora-h
 check grep -q '^disable getty@tty1.service' /usr/lib/systemd/system-preset/05-fedora-hypr.preset
 check grep -q pam_fprintd /etc/pam.d/system-auth
 check grep -q 'fingerprint:enabled = true' /etc/skel/.config/hypr/hyprlock.conf
-check grep -q 'FH_PATH /usr/share/fedora-hypr' /etc/fish/conf.d/fedora-hypr.fish
+check zsh -lc 'test "$FH_PATH" = /usr/share/fedora-hypr'
 
 # --- Task 4: first boot (two units: user creation before greetd, flatpaks once online)
 check test "$(systemctl is-enabled fh-first-boot-user 2>/dev/null)" = enabled
@@ -62,6 +62,7 @@ check grep -q '^Type=oneshot' /usr/lib/systemd/system/fh-first-boot-user.service
 check bash -c 'FH_USER=testuser fh-first-boot-user && id -nG testuser | grep -qw wheel && test -d /var/home/testuser'
 # password is NOT expired (tuigreet cannot run the PAM change conversation); a marker drives fh-setup-password instead
 check bash -c '! grep -q "chage" /usr/bin/fh-first-boot-user'
+check grep -q -- "--shell /usr/bin/zsh" /usr/bin/fh-first-boot-user
 check test -x /usr/bin/fh-setup-password
 check test -f /var/home/testuser/.local/state/fedora-hypr/password-change-pending
 check test "$(stat -c %U /var/home/testuser/.local/state/fedora-hypr/password-change-pending)" = testuser

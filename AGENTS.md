@@ -75,6 +75,7 @@ Fedora release bump = change the `FROM` tag only (`TAG` is derived from it every
 
 ## Conventions
 
+- Login shell is **zsh** (the author's shell); `FH_PATH` reaches it via `/etc/profile.d` → `/etc/zprofile`.
 - Helper scripts are `fh-*` in `system/usr/bin`, `#!/usr/bin/env bash`, executable,
   `shellcheck -S error` clean. Ported ones carry `# Adapted from Omarchy (MIT) — https://github.com/basecamp/omarchy`
   as line 2. **No other `omarchy` strings anywhere in `system/`** (case-insensitive; filenames too).
@@ -111,9 +112,9 @@ A failed CI build is safe: the machine keeps its last good image.
   Hyprland eats SUPER, so inject keys through the monitor socket:
   `echo 'sendkey meta_l-spc' | socat - UNIX-CONNECT:vm/monitor.sock`
 - Serial console (login shell in the guest, from the host):
-  `socat -,raw,echo=0 UNIX-CONNECT:vm/serial.sock` — log in `eben`/`changeme`, then
-  **`exec bash --norc` first**: fish stalls ~10 s on terminal-capability queries over serial
-  and swallows typed input meanwhile. `vm/serial.log` keeps the kernel/systemd boot log.
+  `socat -,raw,echo=0 UNIX-CONNECT:vm/serial.sock` — log in `eben`/`changeme`. If the shell
+  seems to swallow input, run `exec bash --norc` (interactive shells that probe terminal
+  capabilities can stall over a dumb serial line). `vm/serial.log` keeps the kernel/systemd boot log.
 - Scripted probes from the host: `{ printf 'CMD\n'; sleep 6; } | socat - UNIX-CONNECT:vm/serial.sock`.
 - First things to look at in the guest:
   `systemctl list-jobs` (anything "waiting" on `graphical.target`?), `systemctl status greetd fh-first-boot-user`,
