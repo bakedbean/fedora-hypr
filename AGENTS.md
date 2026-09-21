@@ -20,11 +20,13 @@ were overridden during implementation — the code and this file win where they 
 ## Layout (what lives where and why)
 
 ```
-Containerfile              FROM ghcr.io/ublue-os/base-main:44; packages → COPY system/ → services → lint
+Containerfile              stage rust-build (wsx, waybar-docker) → FROM ghcr.io/ublue-os/base-main:44; packages → COPY --from=rust-build → COPY system/ → services → lint
 build/10-packages.sh       dnf install from build/packages/{fedora,copr}.txt; COPRs from build/repos/*.repo
 build/20-services.sh       systemctl enable/disable, authselect, cleanup; COPR repo files removed here
 system/                    copied verbatim onto / in the image
   usr/bin/fh-*             ~95 helper scripts (menu, theme, capture, toggles, launchers, first-boot)
+  usr/bin/{wsx,waybar-docker}  Rust binaries from the rust-build stage (author's Waybar modules)
+  etc/environment.d/50-fedora-hypr.conf  FH_PATH, DOCKER_HOST (rootless podman socket for waybar-docker)
   usr/share/fedora-hypr/
     default/hypr/          canonical Hyprland config (autostart, bindings/, apps/, toggles/, envs, looknfeel…)
     default/{waybar,mako,swayosd}/  canonical app configs
@@ -35,7 +37,9 @@ system/                    copied verbatim onto / in the image
   etc/greetd/config.toml   tuigreet → uwsm start -- fedora-hypr.desktop
   usr/lib/systemd/system/  fh-first-boot-user.service, fh-first-boot-flatpaks.service
   usr/lib/systemd/system-preset/05-fedora-hypr.preset   disable sshd + getty@tty1 (survives first-boot preset-all)
-tests/check.sh             in-image self-check (~120 checks); runs theme_test.sh, scripts_test.sh, binds_test.sh
+tests/check.sh             in-image self-check (~130 checks); runs theme_test.sh, scripts_test.sh, binds_test.sh
+tests/migrate_test.sh      HOST-side test of tools/migrate-home.sh on a fabricated home (make test-migrate)
+tools/migrate-home.sh      copies the author's Omarchy home onto a target drive (see "Migrating a home from Omarchy")
 vm.sh / make vm            QEMU smoke test (see Debugging)
 .github/workflows/build.yml  build → check → push :44 and :44-YYYYMMDD on push to main + daily
 ```
@@ -102,6 +106,11 @@ Sources, all pinned in `build/repos/*.repo` with `includepkgs` except the Hyprla
 - `mineiro/utility-belt` — impala, bluetui
 - `agaspar/omedora-4` — satty, starship, lazygit, lazydocker, mise, gpu-screen-recorder
 - `whelanh/omarchy` — hyprland-preview-share-picker
+Rust binaries not packaged anywhere (`wsx`, `waybar-docker`) are built in the `rust-build` stage of the
+Containerfile (`registry.fedoraproject.org/fedora:44` + cargo; rustc 1.98 there, wsx needs ≥1.85). wsx is
+pinned by `ARG WSX_REF` (a commit of github.com/bakedbean/workspacex) — bump it to update wsx; waybar-docker
+is `cargo install`ed by version. Cargo registry and target dirs are `--mount=type=cache`d, so a rebuild
+after a bump is incremental (~2 min cold). The stage does not ship; only the two binaries are copied.
 If a COPR dies, alternatives with F44 builds: `sachesi/hyprland` (no uwsm). Check with
 `curl -s 'https://copr.fedorainfracloud.org/api_3/project?ownername=X&projectname=Y' | jq .chroot_repos`.
 A failed CI build is safe: the machine keeps its last good image.
@@ -154,6 +163,22 @@ A failed CI build is safe: the machine keeps its last good image.
   file with `getfattr -n security.selinux` for the right value). Prefer in-place edits from a running
   deployment whenever one still logs in.
 - `chsh` is missing from base-main (lost hardlink of `chfn`); `10-packages.sh` restores it.
+
+## Migrating a home from Omarchy
+
+`tools/migrate-home.sh` copies the author's dotfiles from the Omarchy machine onto a fedora-hypr drive
+(`sudo tools/migrate-home.sh /dev/sdX3`, or `--dest DIR` for an already-mounted disk; `--dry-run` first).
+It copies shell (`.zshrc` split so the secrets block lands in `~/.zshrc.local`, mode 600), `.ssh`, oh-my-zsh,
+tmux/btop/lazygit/git/fastfetch/starship, `dotfiles` + the `.config/nvim` symlink (AstroNvim), RadioBar, fonts,
+`.local/share/applications`, Waybar and the `~/.config/hypr/*.conf` overrides — rewriting `omarchy-`→`fh-`,
+`$OMARCHY_PATH`→`/usr/share/fedora-hypr`, `~/.cargo/bin/waybar-docker`→`waybar-docker`, native apps→`flatpak run`,
+and dropping the voxtype/update modules and `.desktop` entries whose binary the image lacks (listed in the
+output). Rewritten Waybar JSON is validated with jq; `tests/migrate_test.sh` (`make test-migrate`, host-side,
+no root) covers the rewrites on a fabricated home. **SELinux caveat**: a non-SELinux host writes unlabelled
+files, so as root the script sets `security.selinux` (`user_home_t`, `ssh_home_t` for `.ssh`) on everything
+it copied and chowns to 1000:1000; still run `sudo restorecon -Rv ~` after the first login. On a raw bootc
+disk the home is under `ostree/deploy/default/var/home/<user>`; the script finds either layout.
+`tools/` and `tests/` may say "omarchy" (they rewrite it); `system/` still must not.
 
 ## Reference material on the host (read-only)
 
