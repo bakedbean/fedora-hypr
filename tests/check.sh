@@ -14,6 +14,8 @@ for b in Hyprland hyprlock hypridle hyprpicker hyprsunset uwsm \
   check command -v "$b"
 done
 check test -x /usr/libexec/hyprpolkitagent
+# pinned to 0.56.x: 0.57 drops .conf/hyprlang support (AGENTS.md, Lua config migration)
+check bash -c "rpm -q hyprland | grep -q '^hyprland-0.56'"
 check rpm -q fprintd
 check command -v chromium-browser
 check command -v swayosd-server

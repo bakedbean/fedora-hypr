@@ -170,6 +170,7 @@ A failed CI build is safe: the machine keeps its last good image.
 - Omarchy's theme engine builds a sed script from `colors.toml`; values are escaped for `\ | &`
   and theme names are whitelisted (`^[a-z0-9-]+$`) — keep both.
 - The Containerfile copies `system/` **after** the package layer on purpose; don't move it.
+- Starting `Hyprland` directly (not via `start-hyprland` / `uwsm start … hyprland.desktop`) triggers a startup banner in 0.56+.
 - Removing a package an existing account depends on is a *migration*: dropping `fish` left the installed
   user with a login shell that no longer existed, so every terminal AND every `login` bounced. Recovery
   needs to be done from outside; see below. When removing something users may reference from
@@ -213,6 +214,12 @@ disk the home is under `ostree/deploy/default/var/home/<user>`; the script finds
 - Omarchy is MIT (`LICENSE.omarchy`).
 
 ## Current state and open items
+
+**Lua config migration (blocking Hyprland ≥0.57):** Hyprland deprecates the `.conf`/hyprlang
+format in 0.56 and removes it in 0.57 (https://hypr.land/news/26_lua/). All of `default/hypr/**`
+and skel are `.conf`; Hyprland is pinned to 0.56.x in `build/packages/copr.txt` until this is done.
+Plan: wait for Omarchy to migrate its defaults, then re-port from theirs (tools:
+https://github.com/loeclos/hypr-migrate). The deprecation banner at login is expected until then.
 
 Done and verified in the VM: first boot (user, theme render, Flatpaks in background), tuigreet login,
 Hyprland session with Waybar/wallpaper/mako/Walker/SwayOSD/polkit, in-session password change,
