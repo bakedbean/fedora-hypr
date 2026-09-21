@@ -150,4 +150,8 @@ check bash -c 'XDG_RUNTIME_DIR=/run/user/1000 /usr/lib/systemd/user-environment-
 check test -f /usr/lib/systemd/user/podman.socket
 check grep -q 'exec-once = systemctl --user start podman.socket' /usr/share/fedora-hypr/default/hypr/autostart.conf
 
+# --- GRUB drop-in (gfxterm + hidden menu)
+check test -f /usr/lib/bootupd/grub2-static/configs.d/05_terminal.cfg
+check grep -q "terminal_output gfxterm" /usr/lib/bootupd/grub2-static/configs.d/05_terminal.cfg
+
 exit $fail
