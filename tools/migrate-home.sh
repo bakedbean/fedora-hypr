@@ -210,6 +210,8 @@ if [[ -f $SRC/.zshrc ]]; then
     exit 1
   }
   rewrite_home_paths "$z"
+  # uv's installer appends an unguarded `. "$HOME/.local/share/../bin/env"`; guard it (the file is copied below)
+  sed -i -E 's|^[[:space:]]*(\.\|source)[[:space:]]+["'"'"']?\$HOME/\.local/(share/\.\./)?bin/env["'"'"']?[[:space:]]*$|[ -f "$HOME/.local/bin/env" ] \&\& . "$HOME/.local/bin/env"|' "$z"
   if [[ -s $zl ]]; then
     chmod 600 "$zl"
     REWRITES+=(".zshrc: secrets block (# CCI configuration .. PROD_READ_ONLY_DSN) moved to .zshrc.local")
@@ -225,6 +227,7 @@ if [[ -f $SRC/.zshrc ]]; then
     REWRITES+=(".zshrc: fzf block sources /usr/share/fzf/shell/*.zsh (Fedora) with fallback")
   fi
   REWRITES+=(".zshrc: $SRC -> \$HOME")
+  grep -q '\.local/bin/env' "$z" && REWRITES+=(".zshrc: uv env snippet sourced only if present")
   # the source .zshrc still has the secrets: a moved-out key must never remain in the copy
   if [[ -s $zl ]] && grep -qxFf <(grep -E '^export [A-Z0-9_]+=' "$zl") "$z"; then
     echo "refusing: a line from the secrets block is still in the rewritten .zshrc" >&2; exit 1
@@ -462,6 +465,7 @@ elif [[ -d $SRC/.config/nvim ]]; then
   copy .config/nvim
 fi
 
+copy .local/bin/env   # uv installer's PATH snippet, sourced (guarded) from .zshrc
 # ~/.local/bin/radiobar: recreate as an absolute symlink. /home -> var/home on Fedora, so the
 # same /home/<user> path resolves there.
 if [[ -e $SRC/RadioBar/linux/radiobar ]]; then

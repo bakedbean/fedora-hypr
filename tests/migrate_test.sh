@@ -36,6 +36,8 @@ export OTHER_TOKEN=also-fake
 export PROD_READ_ONLY_DSN=postgres://fake
 if [ -f '$src/Downloads/google-cloud-sdk/path.zsh.inc' ]; then . '$src/Downloads/google-cloud-sdk/path.zsh.inc'; fi
 export PATH=\$HOME/.local/bin:\$PATH
+. "\$HOME/.local/share/../bin/env"
+source '\$HOME/.local/bin/env'
 EOF
 echo 'export EDITOR=nvim' > "$src/.zprofile"
 mkdir -p "$src/.ssh" "$src/.config/gh" "$src/.oh-my-zsh/custom" "$src/.config/tmux" "$src/.config/btop" \
@@ -53,6 +55,7 @@ echo 'x' > "$src/dotfiles/astronvim/init.lua"; ln -s "$src/dotfiles/astronvim" "
 echo 'x' > "$src/RadioBar/linux/radiobar"; chmod +x "$src/RadioBar/linux/radiobar"
 echo 'x' > "$src/RadioBar/build/junk"; echo 'x' > "$src/RadioBar/tools/__pycache__/junk.pyc"
 ln -s "$src/RadioBar/linux/radiobar" "$src/.local/bin/radiobar"
+printf 'export PATH="$HOME/.local/bin:$PATH"\n' > "$src/.local/bin/env"
 echo 'x' > "$src/.local/share/fonts/f.ttf"
 # an old-format user theme + the current-theme copy with one extra background + Wallpapers
 th=$src/.config/omarchy/themes/my-theme
@@ -213,6 +216,9 @@ check grep -q '/usr/share/fzf/shell/key-bindings.zsh' "$home/.zshrc"
 check bash -c "! grep -q 'source /usr/share/fzf/completion.zsh' '$home/.zshrc'"
 check zsh -n "$home/.zshrc"
 check grep -q 'export PATH=$HOME/.local/bin' "$home/.zshrc"                         # tail after the block survives
+check test "$(grep -cF '[ -f "$HOME/.local/bin/env" ] && . "$HOME/.local/bin/env"' "$home/.zshrc")" = 2   # uv snippet guarded (both forms)
+check bash -c "! grep -q 'share/\.\./bin/env' '$home/.zshrc'"
+check test -f "$home/.local/bin/env"
 
 # plain copies
 check test -f "$home/.zprofile"

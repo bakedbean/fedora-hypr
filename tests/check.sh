@@ -148,6 +148,8 @@ check grep -q DOCKER_HOST /etc/environment.d/50-fedora-hypr.conf
 # environment.d expands ${XDG_RUNTIME_DIR} (it has no %t specifier); probe the real generator
 check bash -c 'XDG_RUNTIME_DIR=/run/user/1000 /usr/lib/systemd/user-environment-generators/30-systemd-environment-d-generator | grep -qx "DOCKER_HOST=unix:///run/user/1000/podman/podman.sock"'
 check test -f /usr/lib/systemd/user/podman.socket
+# podman-docker prints an "Emulate Docker CLI" banner on every docker call unless this file exists
+check test -f /etc/containers/nodocker
 check grep -q 'exec-once = systemctl --user start podman.socket' /usr/share/fedora-hypr/default/hypr/autostart.conf
 
 # --- GRUB drop-in (gfxterm + hidden menu)
