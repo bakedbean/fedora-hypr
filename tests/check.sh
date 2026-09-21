@@ -27,12 +27,12 @@ check bash -c '! ls /etc/yum.repos.d/ | grep -Eq "^(dtutila|washkinazy|mineiro|a
 
 # --- Task 3: session plumbing
 check test -f /etc/greetd/config.toml
-check grep -q 'uwsm start -- fedora-hypr.desktop' /etc/greetd/config.toml
+check grep -q 'hyprland.desktop' /etc/greetd/config.toml
 # greetd must run as the user its RPM creates (sysusers), not a made-up one
 check getent passwd "$(sed -n 's/^user = "\(.*\)"/\1/p' /etc/greetd/config.toml)"
 check grep -q 'd /var/cache/tuigreet 0755 greetd greetd' /usr/lib/tmpfiles.d/fedora-hypr.conf
-# our own session entry: never overwrite the RPM-owned hyprland-uwsm.desktop
-check test -f /usr/share/wayland-sessions/fedora-hypr.desktop
+# session launches via the RPM-owned hyprland.desktop (start-hyprland); we ship no session file of our own
+check test -x "$(sed -n 's/^Exec=//p' /usr/share/wayland-sessions/hyprland.desktop)"
 check rpm -V hyprland
 check test "$(systemctl is-enabled greetd 2>/dev/null)" = enabled
 check test "$(systemctl is-enabled getty@tty1 2>/dev/null)" = disabled

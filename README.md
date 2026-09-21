@@ -139,14 +139,13 @@ fedora-hypr/
 │   │   ├── themed/                # theme-parameterized templates (*.tpl)
 │   │   ├── themes/<name>/         # ported theme color definitions
 │   │   └── flatpaks.txt           # Flatpaks installed by fh-first-boot-flatpaks
-│   ├── usr/share/wayland-sessions/ # fedora-hypr.desktop (session entry for greetd)
 │   ├── usr/lib/systemd/system/    # fh-first-boot-user.service, fh-first-boot-flatpaks.service
 │   ├── usr/lib/tmpfiles.d/        # /var/cache/tuigreet
 │   ├── usr/lib/systemd/system-preset/ # keep sshd/getty@tty1 disabled through first-boot preset-all
 │   └── etc/
 │       ├── skel/.config/          # thin per-user config seeded on first login, sources the defaults
 │       │                            # (hypridle.conf / hyprlock.conf live here: both only search ~/.config/hypr)
-│       ├── greetd/config.toml     # tuigreet → uwsm start Hyprland
+│       ├── greetd/config.toml     # tuigreet → uwsm start -e -D Hyprland hyprland.desktop (RPM-owned session)
 │       └── ...                    # NetworkManager, environment.d, sudoers.d, profile.d
 ├── tests/                       # check.sh (in-image self-check) + scripts_test.sh, theme_test.sh, binds_test.sh
 ├── vm.sh                        # install-to-raw-disk + QEMU boot for local smoke testing

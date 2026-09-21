@@ -34,7 +34,7 @@ system/                    copied verbatim onto / in the image
     themes/<name>/         19 themes: colors.toml, backgrounds/, btop.theme, [light.mode]
     flatpaks.txt           installed by fh-first-boot-flatpaks
   etc/skel/                per-user seed; hyprland.conf sources the defaults then user overrides
-  etc/greetd/config.toml   tuigreet → uwsm start -- fedora-hypr.desktop
+  etc/greetd/config.toml   tuigreet → uwsm start -e -D Hyprland hyprland.desktop (RPM-owned session)
   usr/lib/systemd/system/  fh-first-boot-user.service, fh-first-boot-flatpaks.service
   usr/lib/systemd/system-preset/05-fedora-hypr.preset   disable sshd + getty@tty1 (survives first-boot preset-all)
 tests/check.sh             in-image self-check (~130 checks); runs theme_test.sh, scripts_test.sh, binds_test.sh
