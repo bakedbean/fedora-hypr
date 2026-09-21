@@ -27,6 +27,10 @@ systemctl enable fh-first-boot-flatpaks.service
 chmod 0440 /etc/sudoers.d/wheel
 chmod 0440 /etc/sudoers.d/fh-update-available
 
+# --- GSettings defaults (system/usr/share/glib-2.0/schemas/*.gschema.override): compile them
+# into gschemas.compiled so Nautilus/GTK pick them up without any per-user step.
+glib-compile-schemas /usr/share/glib-2.0/schemas
+
 # --- Boot splash: Plymouth "hypedora" theme (system/usr/share/plymouth/themes/hypedora,
 # selected by system/etc/plymouth/plymouthd.conf) must be inside the initramfs, which
 # base-main ships prebuilt. Rebuild it the way ublue does; dracut's plymouth module copies

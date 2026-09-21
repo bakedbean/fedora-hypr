@@ -40,6 +40,7 @@ system/                    copied verbatim onto / in the image
   usr/lib/systemd/system-preset/05-fedora-hypr.preset   disable sshd + getty@tty1 (survives first-boot preset-all)
   usr/share/plymouth/themes/hypedora/   boot splash (Omarchy's script-module theme, HYPEDORA wordmark); selected by etc/plymouth/plymouthd.conf
   usr/lib/bootc/kargs.d/10-fedora-hypr.toml   kernel args "quiet splash" (bootc applies at install, reconciles on upgrade)
+  usr/share/glib-2.0/schemas/10-fedora-hypr.gschema.override   system-wide GSettings defaults (Nautilus/GTK show hidden files); compiled in 20-services.sh
 tests/check.sh             in-image self-check (~170 checks); runs theme_test.sh, scripts_test.sh, binds_test.sh
 tests/migrate_test.sh      HOST-side test of tools/migrate-home.sh on a fabricated home (make test-migrate)
 tools/migrate-home.sh      copies the author's Omarchy home onto a target drive (see "Migrating a home from Omarchy")

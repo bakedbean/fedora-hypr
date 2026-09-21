@@ -1,0 +1,10 @@
+# System-wide GSettings defaults for fedora-hypr. Compiled into gschemas.compiled by
+# build/20-services.sh; a user's own `gsettings set` (dconf) still overrides these.
+[org.gnome.nautilus.preferences]
+show-hidden-files=true
+
+[org.gtk.Settings.FileChooser]
+show-hidden=true
+
+[org.gtk.gtk4.Settings.FileChooser]
+show-hidden=true

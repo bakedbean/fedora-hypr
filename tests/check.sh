@@ -49,6 +49,10 @@ check grep -q '^disable getty@tty1.service' /usr/lib/systemd/system-preset/05-fe
 check grep -q pam_fprintd /etc/pam.d/system-auth
 check grep -q 'fingerprint:enabled = true' /etc/skel/.config/hypr/hyprlock.conf
 check zsh -lc 'test "$FH_PATH" = /usr/share/fedora-hypr'
+# Nautilus + GTK file choosers show hidden files by default (gschema override, compiled in)
+check test -f /usr/share/glib-2.0/schemas/10-fedora-hypr.gschema.override
+check test "$(gsettings get org.gnome.nautilus.preferences show-hidden-files)" = true
+check test "$(gsettings get org.gtk.gtk4.Settings.FileChooser show-hidden)" = true
 
 # --- Task 4: first boot (two units: user creation before greetd, flatpaks once online)
 check test "$(systemctl is-enabled fh-first-boot-user 2>/dev/null)" = enabled
