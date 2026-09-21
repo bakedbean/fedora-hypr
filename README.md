@@ -112,6 +112,11 @@ up; it retries every minute until every app is present. Watch it with
   apply. `/home` is untouched by upgrades and rollbacks.
 - `sudo bootc switch ghcr.io/bakedbean/fedora-hypr:44-YYYYMMDD` — pin to a specific known-good dated
   build instead of tracking the rolling `:44` tag; switch back to `:44` later to resume tracking.
+- Boot splash: the image ships a Plymouth theme (`hypedora`, Omarchy's splash with a HYPEDORA wordmark)
+  and the `quiet splash` kernel args in `/usr/lib/bootc/kargs.d/10-fedora-hypr.toml`. bootc applies
+  `kargs.d` on install and reconciles it on upgrade, so installs made before the theme landed get the
+  args with their next `fh-update`; if the splash still doesn't show, check with `rpm-ostree kargs` and
+  add them once with `sudo rpm-ostree kargs --append=quiet --append=splash` (then reboot).
 
 ## CI
 
@@ -129,7 +134,7 @@ fedora-hypr/
 ├── Containerfile               # FROM ghcr.io/ublue-os/base-main:44 … RUN bootc container lint
 ├── build/                      # scripts run during image build
 │   ├── 10-packages.sh          # dnf install from Fedora repos + pinned COPRs
-│   ├── 20-services.sh          # systemctl enable greetd + first-boot units, disable sshd, authselect; drop COPR repo files
+│   ├── 20-services.sh          # systemctl enable greetd + first-boot units, disable sshd, authselect; drop COPR repo files; rebuild initramfs (Plymouth)
 │   ├── packages/                 # fedora.txt / copr.txt package lists
 │   └── repos/                    # pinned .repo files for COPRs used at build time
 ├── system/                     # copied verbatim onto / in the image (COPY system/ /)
@@ -142,12 +147,16 @@ fedora-hypr/
 │   ├── usr/lib/systemd/system/    # fh-first-boot-user.service, fh-first-boot-flatpaks.service
 │   ├── usr/lib/tmpfiles.d/        # /var/cache/tuigreet
 │   ├── usr/lib/systemd/system-preset/ # keep sshd/getty@tty1 disabled through first-boot preset-all
+│   ├── usr/lib/bootc/kargs.d/     # quiet splash
+│   ├── usr/share/plymouth/themes/hypedora/  # boot splash (Omarchy's theme, HYPEDORA logo; tools/gen-plymouth-logo.py)
 │   └── etc/
 │       ├── skel/.config/          # thin per-user config seeded on first login, sources the defaults
 │       │                            # (hypridle.conf / hyprlock.conf live here: both only search ~/.config/hypr)
 │       ├── greetd/config.toml     # tuigreet → uwsm start -e -D Hyprland hyprland.desktop (RPM-owned session)
+│       ├── plymouth/plymouthd.conf # Theme=hypedora
 │       └── ...                    # NetworkManager, environment.d, sudoers.d, profile.d
 ├── tests/                       # check.sh (in-image self-check) + scripts_test.sh, theme_test.sh, binds_test.sh
+├── tools/                       # migrate-home.sh (Omarchy home → drive), gen-plymouth-logo.py (HYPEDORA wordmark)
 ├── vm.sh                        # install-to-raw-disk + QEMU boot for local smoke testing
 ├── Makefile                     # build / shell / check / push / vm targets
 └── .github/workflows/build.yml  # CI: build, self-check, push to ghcr.io

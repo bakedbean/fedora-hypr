@@ -73,5 +73,7 @@ google-noto-sans-fonts
 fontawesome-6-free-fonts
 yaru-icon-theme
 kvantum
+# boot splash (Plymouth script-module theme: hypedora)
+plymouth-plugin-script
 # build/test tooling
 ShellCheck

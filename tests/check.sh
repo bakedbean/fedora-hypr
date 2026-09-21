@@ -170,4 +170,31 @@ check grep -qF '/usr/sbin/bootc status --format json' /etc/sudoers.d/fh-update-a
 check test -f /usr/lib/bootupd/grub2-static/configs.d/05_terminal.cfg
 check grep -q "terminal_output gfxterm" /usr/lib/bootupd/grub2-static/configs.d/05_terminal.cfg
 
+# --- Boot splash: Plymouth hypedora theme, selected, inside the initramfs, kargs
+T=/usr/share/plymouth/themes/hypedora
+for f in hypedora.plymouth hypedora.script logo.png progress_bar.png progress_box.png entry.png bullet.png lock.png; do
+  check test -f "$T/$f"
+done
+check rpm -q plymouth-plugin-script
+check test -f /usr/lib64/plymouth/script.so   # ModuleName=script needs the plugin
+check grep -q '^ModuleName=script' "$T/hypedora.plymouth"
+check grep -q "^ScriptFile=$T/hypedora.script" "$T/hypedora.plymouth"
+check bash -c 'fc-list | grep -qi cantarell'   # Font= in hypedora.plymouth
+check test "$(plymouth-set-default-theme)" = hypedora
+check bash -c 'plymouth-set-default-theme --list | grep -qx hypedora'
+check grep -q '^Theme=hypedora' /etc/plymouth/plymouthd.conf
+# the logo is the Omarchy-style wordmark: same height, wider (8 letters); regenerate with tools/gen-plymouth-logo.py
+check bash -c 'read -r w h < <(magick identify -format "%w %h" /usr/share/plymouth/themes/hypedora/logo.png); test "$h" = 188 && test "$w" -gt 800'
+# ported theme carries only the attribution line
+check bash -c 'test "$(grep -ril omarchy /usr/share/plymouth)" = /usr/share/plymouth/themes/hypedora/hypedora.script'
+check bash -c 'test "$(grep -ic omarchy /usr/share/plymouth/themes/hypedora/hypedora.script)" = 1 && grep -q "^# Adapted from Omarchy (MIT)" /usr/share/plymouth/themes/hypedora/hypedora.script'
+# theme is inside the shipped initramfs (rebuilt by build/20-services.sh)
+check bash -c 'KVER=$(ls /usr/lib/modules | head -1); lsinitrd "/usr/lib/modules/$KVER/initramfs.img" | grep -q hypedora/logo.png'
+check bash -c 'KVER=$(ls /usr/lib/modules | head -1); lsinitrd "/usr/lib/modules/$KVER/initramfs.img" | grep -q lib64/plymouth/script.so'
+check bash -c 'KVER=$(ls /usr/lib/modules | head -1); lsinitrd "/usr/lib/modules/$KVER/initramfs.img" | sed -n "/^dracut modules:/,/^====/p" | grep -qx ostree'
+check test ! -e /var/roothome   # dracut helper dir removed again (lint: nothing under /var)
+# kernel args: bootc applies kargs.d at install and reconciles the diff on upgrade
+check test -f /usr/lib/bootc/kargs.d/10-fedora-hypr.toml
+check python3 -c 'import tomllib; k = tomllib.load(open("/usr/lib/bootc/kargs.d/10-fedora-hypr.toml", "rb"))["kargs"]; assert "quiet" in k and "splash" in k'
+
 exit $fail

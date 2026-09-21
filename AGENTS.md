@@ -22,7 +22,7 @@ were overridden during implementation — the code and this file win where they 
 ```
 Containerfile              stage rust-build (wsx, waybar-docker) → FROM ghcr.io/ublue-os/base-main:44; packages → COPY --from=rust-build → COPY system/ → services → lint
 build/10-packages.sh       dnf install from build/packages/{fedora,copr}.txt; COPRs from build/repos/*.repo
-build/20-services.sh       systemctl enable/disable, authselect, cleanup; COPR repo files removed here
+build/20-services.sh       systemctl enable/disable, authselect, cleanup; COPR repo files removed here; initramfs rebuild (Plymouth theme)
 system/                    copied verbatim onto / in the image
   usr/bin/fh-*             ~95 helper scripts (menu, theme, capture, toggles, launchers, first-boot, update-check)
   usr/bin/{wsx,waybar-docker}  Rust binaries from the rust-build stage (author's Waybar modules)
@@ -37,9 +37,12 @@ system/                    copied verbatim onto / in the image
   etc/greetd/config.toml   tuigreet → uwsm start -e -D Hyprland hyprland.desktop (RPM-owned session)
   usr/lib/systemd/system/  fh-first-boot-user.service, fh-first-boot-flatpaks.service
   usr/lib/systemd/system-preset/05-fedora-hypr.preset   disable sshd + getty@tty1 (survives first-boot preset-all)
-tests/check.sh             in-image self-check (~130 checks); runs theme_test.sh, scripts_test.sh, binds_test.sh
+  usr/share/plymouth/themes/hypedora/   boot splash (Omarchy's script-module theme, HYPEDORA wordmark); selected by etc/plymouth/plymouthd.conf
+  usr/lib/bootc/kargs.d/10-fedora-hypr.toml   kernel args "quiet splash" (bootc applies at install, reconciles on upgrade)
+tests/check.sh             in-image self-check (~170 checks); runs theme_test.sh, scripts_test.sh, binds_test.sh
 tests/migrate_test.sh      HOST-side test of tools/migrate-home.sh on a fabricated home (make test-migrate)
 tools/migrate-home.sh      copies the author's Omarchy home onto a target drive (see "Migrating a home from Omarchy")
+tools/gen-plymouth-logo.py regenerates the HYPEDORA logo.png from Omarchy's logo (see "Boot splash")
 vm.sh / make vm            QEMU smoke test (see Debugging)
 .github/workflows/build.yml  test-migrate (host) → build → check → push :44 and :44-YYYYMMDD on push to main + weekly
 ```
@@ -116,6 +119,32 @@ fixed argument list, read-only subcommand) so the access granted is exactly "rea
 unprivileged", nothing else `bootc`/`sudo` can do. Any failure (rule missing, offline, skopeo
 digest mismatch check failing) is treated as "up to date" — the indicator never shows a false
 positive.
+
+## Boot splash
+
+`system/usr/share/plymouth/themes/hypedora/` is Omarchy's Plymouth theme (`ModuleName=script`: centred
+logo, fake-then-real progress bar, LUKS password dialog) with `hypedora.script` verbatim apart from the
+attribution line, and the same asset PNGs. `logo.png` (869×188) reads **HYPEDORA** in the identical
+pixel style: `tools/gen-plymouth-logo.py` recovers the 81×19 cell grid of Omarchy's `logo.png` (pitch 79/8 px),
+cuts the letters, derives P (R minus its leg), E (C plus a middle bar) and D (O with a straight left stem),
+recomposes with the original 2-cell spacing and colour, and self-checks by regenerating OMARCHY against the
+source (mean alpha diff 1/255). Run it in a container if Pillow/numpy are missing on the host (usage in
+its docstring); `docs/hypedora-logo-preview.png` is the 2× preview on the splash background.
+Three pieces make it show up: `system/etc/plymouth/plymouthd.conf` (`Theme=hypedora`, the file
+`plymouth-set-default-theme` would write), `plymouth-plugin-script` in `build/packages/fedora.txt`
+(base-main ships only the two-step/text plugins), and an **initramfs rebuild** in `build/20-services.sh` —
+base-main ships a prebuilt `/usr/lib/modules/$KVER/initramfs.img`, and Plymouth loads the theme from the
+initramfs, so it is regenerated with `dracut --no-hostonly --reproducible --add ostree` (dracut's `plymouth`
+module copies the default theme + plugin; `/var/roothome` is created for the `/root` symlink and removed
+again; ~1 min of build time). `system/usr/lib/bootc/kargs.d/10-fedora-hypr.toml` adds `quiet splash`
+(plymouthd shows the splash only with `splash`/`rhgb` on the cmdline). bootc honours `kargs.d` at
+install **and** on `bootc upgrade`/`switch` — the diff between the booted and the new image's kargs.d is
+applied to the bootloader entries (bootc docs, "Kernel arguments": "changes to kargs.d files included in
+a container build are honored post-install") — so an existing install picks the args up on its next
+update; `rpm-ostree kargs` (present in the image) shows the result and is only a fallback for adding
+them by hand. Verified so far only inside the image (`tests/check.sh`: theme selected, inside the
+initramfs, kargs parse); not yet seen on a real boot — if the splash does not appear, look at
+`journalctl -b -u plymouth-start` and `cat /proc/cmdline` (needs `splash`) first.
 
 ## Package sourcing
 
@@ -228,7 +257,7 @@ theme switching, sshd off. CI publishes to ghcr.
 Not yet verified (needs the Framework 12): Wi-Fi via impala, brightness/volume keys, suspend/resume,
 fingerprint (`fh-setup-fingerprint`; PAM `with-fingerprint` is enabled), touchpad gestures, Flatpak
 app class names in `default/hypr/apps/*.conf` (1Password/LocalSend may differ under Flatpak),
-`bootc upgrade` → `bootc rollback` round trip. Record hardware findings under "Framework 12 notes" in README.
+`bootc upgrade` → `bootc rollback` round trip, the Plymouth splash on a real boot (see "Boot splash"). Record hardware findings under "Framework 12 notes" in README.
 
 Known deferred minors: `fh-brightness-display-apple` needs unpackaged `asdcontrol`; keybindings viewer
 (`SUPER K`) sizing; Waybar weather polls wttr.in every 60 s; no headless parse check for

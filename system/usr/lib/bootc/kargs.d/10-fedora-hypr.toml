@@ -1,0 +1,3 @@
+# Silence the kernel/systemd console output and show the Plymouth splash.
+# bootc applies kargs.d at install and reconciles changes on upgrade/switch.
+kargs = ["quiet", "splash"]
