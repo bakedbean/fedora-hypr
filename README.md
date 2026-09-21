@@ -2,12 +2,13 @@
   <img src="docs/hypedora-logo.png" alt="HYPEDORA" width="320">
 </p>
 
-# fedora-hypr
+# Hypedora
 
-**HYPEDORA** — a [bootc](https://containers.github.io/bootc/) image, built on `ghcr.io/ublue-os/base-main`,
-that boots into an opinionated Hyprland desktop on Fedora: an immutable, container-built,
-atomically-updated image with a curated look, keybindings, a theme engine, and a helper-script
-workflow driven from a single menu.
+A [bootc](https://containers.github.io/bootc/) image, built on `ghcr.io/ublue-os/base-main`, that boots
+into an opinionated Hyprland desktop on Fedora: an immutable, container-built, atomically-updated
+image with a curated look, keybindings, a theme engine, and a helper-script workflow driven from a
+single menu. The image and its on-disk paths keep the `fedora-hypr` name (`ghcr.io/bakedbean/fedora-hypr`,
+`/usr/share/fedora-hypr`, `~/.config/fedora-hypr`, `fh-*` scripts).
 
 ## Host prereqs
 
