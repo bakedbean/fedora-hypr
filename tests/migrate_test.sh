@@ -88,7 +88,7 @@ cat > "$src/.config/waybar/config.jsonc" <<EOF
   },
   "clock": {
     "format": "{:%H:%M,}",
-    "tooltip": false
+    "tooltip": false, // same-line comment after a trailing comma
   },
   "custom/radio": {
     "exec": "RADIOBAR_SCROLL_WINDOW=25 radiobar status",
@@ -236,6 +236,7 @@ menu_glyph=$(sed 's|//.*||' "$here/../system/usr/share/fedora-hypr/default/wayba
 check test -n "$menu_glyph"
 check bash -c "sed 's|//.*||' '$wb/config.jsonc' | jq -e --arg g '$menu_glyph' '.\"custom/menu\".format == \$g'"
 check bash -c "sed 's|//.*||' '$wb/config.jsonc' | jq -e '.clock.format == \"{:%H:%M,}\"'"   # ",}" inside a string untouched
+check bash -c "sed 's|//.*||' '$wb/config.jsonc' | jq -e '.clock.tooltip == false'"              # trailing comma + same-line // comment
 check bash -c "sed 's|//.*||' '$wb/config.jsonc' | jq -e '.\"custom/docker\".exec == \"waybar-docker\"'"
 check bash -c "sed 's|//.*||' '$wb/config.jsonc' | jq -e '.\"custom/idle-indicator\".exec == \"/usr/share/fedora-hypr/default/waybar/indicators/idle.sh\"'"
 check bash -c "sed 's|//.*||' '$wb/config.jsonc' | jq -e '.cpu.\"on-click\" == \"fh-launch-or-focus-tui btop\"'"

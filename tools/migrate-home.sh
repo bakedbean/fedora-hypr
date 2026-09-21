@@ -29,6 +29,11 @@
 #   - the target uid/gid is fixed at 1000:1000 (the first user fh-first-boot-user creates)
 #   - files copied by an earlier run that a later run would drop (changed drop rules) are not removed
 #   - source-home literals (/home/<user>) are replaced textually; a longer path sharing the prefix would match
+#   - waybar module-block removal is indentation-bound (2-space top-level blocks) and list-entry removal handles
+#     single-line arrays only; a config in another shape fails closed via the jq validation
+#   - on re-run, a real directory already at <target>/.config/nvim is left in place (the symlink is not forced)
+#   - a CRLF .zshrc is unsupported (markers are matched on LF lines)
+#   - labels are only user_home_t / ssh_home_t; run `restorecon -Rv ~` on Fedora for its finer-grained types
 set -euo pipefail
 
 usage() { sed -n '2,/^$/p' "$0" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
@@ -287,8 +292,9 @@ if [[ -d $SRC/$wb ]]; then
       "$cfg"
     rewrite_home_paths "$cfg"
     # waybar tolerates a trailing comma before a } / ] on a following line, jq does not; normalise so the
-    # result validates. Newline-anchored on purpose: ",}" inside a string on one line is left alone.
-    perl -0pi -e 's/,([ \t]*\n(?:\s*\/\/[^\n]*\n)*\s*[\]}])/$1/g' "$cfg"
+    # result validates. Newline-anchored on purpose: ",}" inside a string on one line is left alone;
+    # a same-line "// comment" after the comma is allowed.
+    perl -0pi -e 's/,([ \t]*(?:\/\/[^\n]*)?\n(?:\s*\/\/[^\n]*\n)*\s*[\]}])/$1/g' "$cfg"
     REWRITES+=("$wb/config.jsonc: omarchy- -> fh-; \$OMARCHY_PATH indicators -> /usr/share/fedora-hypr; ~/.cargo/bin/waybar-docker -> waybar-docker; custom/omarchy -> custom/menu")
     if ! sed 's|//.*||' "$cfg" | jq . >/dev/null 2>&1; then
       echo "refusing: rewritten $wb/config.jsonc does not parse (sed 's|//.*||' | jq .)" >&2; exit 1

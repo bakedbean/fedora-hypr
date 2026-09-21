@@ -25,7 +25,7 @@ jobs:
           echo "DATE=$(date +%Y%m%d)" >> "$GITHUB_ENV"
       - name: Host-side test of tools/migrate-home.sh
         run: |
-          for t in rsync jq perl shellcheck; do command -v "$t" >/dev/null || missing="$missing $t"; done
+          for t in rsync jq perl shellcheck zsh; do command -v "$t" >/dev/null || missing="$missing $t"; done
           if [ -n "${missing:-}" ]; then sudo apt-get update -q && sudo apt-get install -y -q $missing; fi
           make test-migrate
       - name: Build
