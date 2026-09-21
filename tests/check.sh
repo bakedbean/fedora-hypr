@@ -9,7 +9,7 @@ for b in Hyprland hyprlock hypridle hyprpicker hyprsunset uwsm \
          walker elephant waybar mako swaybg grim slurp satty wl-copy \
          alacritty starship lazygit mise impala bluetui wiremix gum greetd tuigreet \
          gpu-screen-recorder hyprland-preview-share-picker firefox nautilus \
-         zsh nvim btop bat eza fd rg zoxide jq dust tldr fastfetch magick \
+         zsh chsh nvim btop bat eza fd rg zoxide jq dust tldr fastfetch magick \
          fcitx5 flatpak; do
   check command -v "$b"
 done

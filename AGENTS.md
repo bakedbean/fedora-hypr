@@ -142,7 +142,7 @@ A failed CI build is safe: the machine keeps its last good image.
   and theme names are whitelisted (`^[a-z0-9-]+$`) — keep both.
 - The Containerfile copies `system/` **after** the package layer on purpose; don't move it.
 - Removing a package an existing account depends on is a *migration*: dropping `fish` left the installed
-  user with a login shell that no longer existed, so every terminal exited instantly (fix was `chsh` from a VT).
+  user with a login shell that no longer existed, so every terminal exited instantly (fix: boot the previous deployment from GRUB and `sudo usermod -s /usr/bin/zsh eben` — `chsh` needs `util-linux-user`, now in the image).
   When you remove something users may reference from `~`/`/etc/passwd`, add a note to README and a
   fallback in the image where cheap.
 
