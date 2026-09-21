@@ -136,4 +136,18 @@ check grep -q fh-setup-fingerprint /usr/bin/fh-menu
 check bash /tests/scripts_test.sh
 check grep -q 'exec-once = uwsm-app -- elephant' /usr/share/fedora-hypr/default/hypr/autostart.conf
 
+# --- Rust binaries (rust-build stage) + direnv + podman socket for waybar-docker
+check command -v wsx
+check command -v waybar-docker
+check command -v direnv
+# wsx creates its state dir under HOME on start; root's HOME in the build container is not writable that way
+check bash -c 'HOME=$(mktemp -d) wsx --version'
+# no socket in the build container: waybar-docker must still emit a JSON module payload and exit 0
+check bash -c 'DOCKER_HOST=unix:///nonexistent timeout 10 waybar-docker | jq -e .class'
+check grep -q DOCKER_HOST /etc/environment.d/50-fedora-hypr.conf
+# environment.d expands ${XDG_RUNTIME_DIR} (it has no %t specifier); probe the real generator
+check bash -c 'XDG_RUNTIME_DIR=/run/user/1000 /usr/lib/systemd/user-environment-generators/30-systemd-environment-d-generator | grep -qx "DOCKER_HOST=unix:///run/user/1000/podman/podman.sock"'
+check test -f /usr/lib/systemd/user/podman.socket
+check grep -q 'exec-once = systemctl --user start podman.socket' /usr/share/fedora-hypr/default/hypr/autostart.conf
+
 exit $fail

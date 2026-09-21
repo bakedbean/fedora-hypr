@@ -47,6 +47,7 @@ zoxide
 jq
 du-dust
 tldr
+direnv
 fastfetch
 ImageMagick
 podman-docker
