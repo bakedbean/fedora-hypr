@@ -150,7 +150,8 @@ fedora-hypr/
 │   │   ├── default/               # canonical hypr/waybar/mako/swayosd/hyprlock/hypridle configs
 │   │   ├── themed/                # theme-parameterized templates (*.tpl)
 │   │   ├── themes/<name>/         # ported theme color definitions
-│   │   └── flatpaks.txt           # Flatpaks installed by fh-first-boot-flatpaks
+│   │   ├── flatpaks.txt           # Flatpaks installed by fh-first-boot-flatpaks
+│   │   └── icons/                 # icons for the stock TUI launcher entries (Docker, Disk Usage)
 │   ├── usr/lib/systemd/system/    # fh-first-boot-user.service, fh-first-boot-flatpaks.service
 │   ├── usr/lib/tmpfiles.d/        # /var/cache/tuigreet
 │   ├── usr/lib/systemd/system-preset/ # keep sshd/getty@tty1 disabled through first-boot preset-all
@@ -159,6 +160,7 @@ fedora-hypr/
 │   └── etc/
 │       ├── skel/.config/          # thin per-user config seeded on first login, sources the defaults
 │       │                            # (hypridle.conf / hyprlock.conf live here: both only search ~/.config/hypr)
+│       ├── skel/.local/share/applications/  # Alacritty.desktop (xdg-terminal-exec keys), Docker + Disk Usage TUI launchers
 │       ├── greetd/config.toml     # tuigreet → uwsm start -e -D Hyprland hyprland.desktop (RPM-owned session)
 │       ├── plymouth/plymouthd.conf # Theme=hypedora
 │       └── ...                    # NetworkManager, environment.d, sudoers.d, profile.d

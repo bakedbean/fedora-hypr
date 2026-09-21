@@ -196,6 +196,30 @@ check test -f /usr/lib/systemd/user/podman.socket
 check test -f /etc/containers/nodocker
 check grep -q 'exec-once = systemctl --user start podman.socket' /usr/share/fedora-hypr/default/hypr/autostart.conf
 
+# --- TUI launchers: Omarchy's stock "Docker"/"Disk Usage" app-launcher entries. Its
+# install/packaging/tuis.sh wrote them into ~/.local/share/applications at install time
+# via omarchy-tui-install; here they ship in skel. Icons are image-owned because Icon=
+# takes an absolute path or an icon-theme name, never ~, and skel cannot know the home.
+A=/etc/skel/.local/share/applications
+check test -f "$A/Docker.desktop"
+check test -f "$A/Disk Usage.desktop"
+check command -v lazydocker
+check grep -qx 'Exec=xdg-terminal-exec --app-id=TUI.tile -e lazydocker' "$A/Docker.desktop"
+check grep -q "^Exec=xdg-terminal-exec --app-id=TUI.float -e bash -c 'dust -r; read -n 1 -s'$" "$A/Disk Usage.desktop"
+check grep -qx 'Icon=/usr/share/fedora-hypr/icons/Docker.png' "$A/Docker.desktop"
+# every absolute Icon= in skel entries resolves inside the image (name-style Icon=Alacritty is skipped)
+check bash -c 'for f in /etc/skel/.local/share/applications/*.desktop; do i=$(sed -n "s/^Icon=//p" "$f"); [[ $i == /* ]] || continue; test -f "$i" || exit 1; done'
+check bash -c 'magick identify /usr/share/fedora-hypr/icons/Docker.png "/usr/share/fedora-hypr/icons/Disk Usage.png"'
+check grep -q 'TUI.float' /usr/share/fedora-hypr/default/hypr/apps/system.conf   # float style gets the floating tag
+# fh-tui-install/remove (ported omarchy-tui-install/remove): 4-arg form with a local icon path
+# writes an executable entry using that path as-is; remove deletes the entry
+check bash -c 'H=$(mktemp -d); D="$H/.local/share/applications"; HOME=$H fh-tui-install "My TUI" btop float /usr/share/fedora-hypr/icons/Docker.png && test -x "$D/My TUI.desktop" && grep -qx "Exec=xdg-terminal-exec --app-id=TUI.float -e btop" "$D/My TUI.desktop" && grep -qx "Icon=/usr/share/fedora-hypr/icons/Docker.png" "$D/My TUI.desktop" && grep -qx "Name=My TUI" "$D/My TUI.desktop" && HOME=$H fh-tui-remove "My TUI" && test ! -e "$D/My TUI.desktop"'
+# tile style; an icon living in the user icon dir is removed along with the entry
+check bash -c 'H=$(mktemp -d); I="$H/.local/share/applications/icons"; mkdir -p "$I"; cp /usr/share/fedora-hypr/icons/Docker.png "$I/X.png"; HOME=$H fh-tui-install X btop tile "$I/X.png" && grep -qx "Exec=xdg-terminal-exec --app-id=TUI.tile -e btop" "$H/.local/share/applications/X.desktop" && HOME=$H fh-tui-remove X && test ! -e "$I/X.png" && test ! -e "$H/.local/share/applications/X.desktop"'
+# missing args are an error, not a half-written entry
+check bash -c 'H=$(mktemp -d); ! HOME=$H fh-tui-install "" btop tile /usr/share/fedora-hypr/icons/Docker.png && test ! -e "$H/.local/share/applications/.desktop"'
+check bash -c 'H=$(mktemp -d); ! HOME=$H fh-tui-remove </dev/null'   # nothing to remove -> exit 1
+
 # --- Updates: fh-update-available (Waybar custom/update indicator, no host bootc deployment here)
 check command -v fh-update-available skopeo
 check grep -q '"custom/update"' /usr/share/fedora-hypr/default/waybar/config.jsonc

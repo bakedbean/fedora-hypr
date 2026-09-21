@@ -37,7 +37,10 @@ system/                    copied verbatim onto / in the image
     themes/<name>/         19 themes: colors.toml, backgrounds/, btop.theme, [light.mode]
     flatpaks.txt           installed by fh-first-boot-flatpaks
     logo.txt               HYPEDORA half-block wordmark tte animates for the screensaver (see "Screensaver")
-  etc/skel/                per-user seed; hyprland.conf sources the defaults then user overrides
+    icons/                 PNGs for the stock TUI launcher entries (Icon= needs an absolute path; skel can't know $HOME)
+  etc/skel/                per-user seed; hyprland.conf sources the defaults then user overrides;
+                           .local/share/applications/{Docker,Disk Usage}.desktop = Omarchy's stock TUI launcher
+                           entries (its tuis.sh wrote them at install time); fh-tui-install/-remove add more
   etc/greetd/config.toml   tuigreet → uwsm start -e -D Hyprland hyprland.desktop (RPM-owned session)
   usr/lib/systemd/system/  fh-first-boot-user.service, fh-first-boot-flatpaks.service, boot.automount -> /dev/null (see "Things that already bit us")
   usr/lib/systemd/system-preset/05-fedora-hypr.preset   disable sshd + getty@tty1 (survives first-boot preset-all)
@@ -110,6 +113,10 @@ Fedora release bump = change the `FROM` tag (`TAG` is derived from it everywhere
 - Binary names in this image: `chromium-browser`, `swayosd-server`/`swayosd-client`, `hyprshot`, `satty`,
   `gpu-screen-recorder`, `impala`, `bluetui`, `wiremix`, `alacritty`, `uwsm-app`, `gum`, `walker`/`elephant`,
   polkit = `systemctl --user start hyprpolkitagent.service`. No compatibility symlinks in `/usr/bin`.
+- App-launcher entries for terminal apps (Walker's "Docker" = lazydocker) are plain `.desktop` files,
+  `Exec=xdg-terminal-exec --app-id=TUI.{tile,float} -e <cmd>` (`TUI.float` is in the floating-window rule).
+  Stock ones ship in skel; users add their own with `fh-tui-install`. An existing account that predates
+  them gets Docker with `fh-tui-install Docker lazydocker tile /usr/share/fedora-hypr/icons/Docker.png`.
 - App launchers are bound on **SUPER SHIFT** (SUPER+letter collides with tiling binds in
   `default/hypr/bindings/tiling-v2.conf`; `tests/binds_test.sh` fails on duplicates).
 - Nothing is written under `/var` or `/usr/local` at build time (lint must stay at 0 warnings).
