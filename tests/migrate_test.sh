@@ -63,8 +63,23 @@ Exec=omarchy-launch-webapp https://discord.com/channels/@me
 Icon=/home/eben/.local/share/applications/icons/Discord.png
 EOF
 printf '[Desktop Entry]\nName=Cliamp\nExec=cliamp\n' > "$src/.local/share/applications/Cliamp.desktop"
-printf '[Desktop Entry]\nName=Claudette\nExec=claudette-app\n' > "$src/.local/share/applications/Claudette.desktop"
-printf '[Desktop Entry]\nHidden=true\n' > "$src/.local/share/applications/hidden.desktop"
+cat > "$src/.local/share/applications/claude-code-url-handler.desktop" <<'EOF'
+[Desktop Entry]
+Name=Claude Code URL Handler
+Exec="/home/eben/.local/bin/claude" --handle-uri %u
+Type=Application
+NoDisplay=true
+MimeType=x-scheme-handler/claude-code;
+EOF
+cat > "$src/.local/share/applications/userapp-Firefox-ABC123.desktop" <<'EOF'
+[Desktop Entry]
+Name=Firefox
+TryExec=/opt/firefox-bin/firefox-bin
+Exec=/opt/firefox-bin/firefox-bin %u
+Icon=firefox
+Type=Application
+MimeType=x-scheme-handler/http;
+EOF
 cat > "$src/.config/waybar/config.jsonc" <<EOF
 {
   "include": ["$src/.config/waybar/wsx.jsonc"],
@@ -212,16 +227,19 @@ check bash -c "! test -e '$home/.config/waybar/style.css.bak.123'"
 check bash -c "! test -e '$home/.config/hypr/bindings.conf.bak.1'"
 check bash -c "! test -e '$home/.config/hypr/hyprland.conf'"     # skel's stays
 
-# desktop entries
-check test -f "$home/.local/share/applications/Discord.desktop"
-check grep -q '^Exec=fh-launch-webapp ' "$home/.local/share/applications/Discord.desktop"
-check bash -c "! grep -q omarchy '$home/.local/share/applications/Discord.desktop'"
-check grep -qxF 'Icon=/home/eben/.local/share/applications/icons/Discord.png' "$home/.local/share/applications/Discord.desktop"
-check bash -c "! test -e '$home/.local/share/applications/Cliamp.desktop'"
-check bash -c "! test -e '$home/.local/share/applications/Claudette.desktop'"
-check test -f "$home/.local/share/applications/hidden.desktop"
-check test -f "$home/.local/share/applications/icons/Discord.png"
-check grep -q 'Cliamp.desktop' "$out"           # dropped files are reported
+# desktop entries: exactly the two allowlisted files, nothing else (no icons/, no webapps)
+ap=$home/.local/share/applications
+check test "$(ls "$ap" | sort | tr '\n' ' ')" = "claude-code-url-handler.desktop userapp-Firefox-ABC123.desktop "
+check cmp -s "$src/.local/share/applications/claude-code-url-handler.desktop" "$ap/claude-code-url-handler.desktop"
+check grep -qxF 'Exec="/home/eben/.local/bin/claude" --handle-uri %u' "$ap/claude-code-url-handler.desktop"
+check grep -qxF 'Exec=firefox %u' "$ap/userapp-Firefox-ABC123.desktop"
+check grep -qxF 'TryExec=firefox' "$ap/userapp-Firefox-ABC123.desktop"
+check bash -c "! grep -q firefox-bin '$ap/userapp-Firefox-ABC123.desktop'"
+check grep -qxF 'MimeType=x-scheme-handler/http;' "$ap/userapp-Firefox-ABC123.desktop"
+check bash -c "! test -e '$ap/Discord.desktop'"
+check bash -c "! test -e '$ap/Cliamp.desktop'"
+check bash -c "! test -e '$ap/icons'"
+check grep -q '^== desktop files: claude-code-url-handler.desktop userapp-Firefox-ABC123.desktop$' "$out"
 
 # waybar
 wb=$home/.config/waybar

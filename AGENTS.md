@@ -172,8 +172,8 @@ It copies shell (`.zshrc` split so the secrets block lands in `~/.zshrc.local`, 
 tmux/btop/lazygit/git/fastfetch/starship, `dotfiles` + the `.config/nvim` symlink (AstroNvim), RadioBar, fonts,
 `.local/share/applications`, Waybar and the `~/.config/hypr/*.conf` overrides — rewriting `omarchy-`→`fh-`,
 `$OMARCHY_PATH`→`/usr/share/fedora-hypr`, `~/.cargo/bin/waybar-docker`→`waybar-docker`, native apps→`flatpak run`,
-and dropping the voxtype/update modules and `.desktop` entries whose binary the image lacks (listed in the
-output). Rewritten Waybar JSON is validated with jq; `tests/migrate_test.sh` (`make test-migrate`, host-side,
+and dropping the voxtype/update modules; of `.local/share/applications` only `claude-code-url-handler.desktop`
+(verbatim) and `userapp-Firefox-*.desktop` (Exec → `firefox`) are copied. Rewritten Waybar JSON is validated with jq; `tests/migrate_test.sh` (`make test-migrate`, host-side,
 no root) covers the rewrites on a fabricated home. **SELinux caveat**: a non-SELinux host writes unlabelled
 files, so as root the script sets `security.selinux` (`user_home_t`, `ssh_home_t` for `.ssh`) on everything
 it copied and chowns to 1000:1000; still run `sudo restorecon -Rv ~` after the first login. On a raw bootc

@@ -13,6 +13,7 @@
 #   --dry-run     mount read-only, rsync -n, write nothing
 #
 # Copies a curated set of dotfiles from the invoking user's home ($SUDO_USER) into
+# (~/.local/share/applications: only claude-code-url-handler.desktop and userapp-Firefox-*.desktop)
 # <disk>/var/home/<user> (bootc keeps it under ostree/deploy/default/var when the raw
 # filesystem is mounted), rewriting Omarchy-isms to their fedora-hypr equivalents on the
 # way. Secrets in ~/.zshrc are split out into ~/.zshrc.local (mode 600). Idempotent.
@@ -24,8 +25,8 @@
 # Known limitations (documented, not fixed):
 #   - rewrites are literal seds on the copied files; the jq validation strips "//..." which would also
 #     eat a URL inside a JSON string (none in the author's config today)
-#   - the image-binary allowlist in in_image() is hand-maintained; an unlisted binary drops a .desktop
-#     file (always reported, never silent)
+#   - the image-binary allowlist in in_image() is hand-maintained; it only drives the "commands not known to be
+#     in the image" report for waybar on-click/exec targets
 #   - the target uid/gid is fixed at 1000:1000 (the first user fh-first-boot-user creates)
 #   - files copied by an earlier run that a later run would drop (changed drop rules) are not removed
 #   - source-home literals (/home/<user>) are replaced textually; a longer path sharing the prefix would match
@@ -120,7 +121,6 @@ REPO=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 # bookkeeping for the summary
 TOUCHED=()     # paths (relative to home) written on the target; chown + label targets
 SKIPPED=()     # source paths that did not exist
-DROPPED=()     # .desktop files not copied, with reason
 REWRITES=()    # human-readable rewrites applied
 UNKNOWN_CMDS=() # on-click/exec targets we could not vouch for (kept)
 CREATED_DIRS=() # parent dirs this run created under the target (chown + label, non-recursive)
@@ -232,25 +232,26 @@ else
   SKIPPED+=(.zshrc)
 fi
 
-# --- 2. desktop entries --------------------------------------------------------------
+# --- 2. desktop entries: an explicit allowlist of two files, nothing else -------------------------
+# - claude-code-url-handler.desktop verbatim: its Exec="/home/<user>/.local/bin/claude" is where the Claude Code
+#   native installer puts the binary on Fedora too (/home resolves there), so it is NOT dropped for being absent
+# - userapp-Firefox-*.desktop with Exec=/opt/firefox-bin/firefox-bin -> firefox (Fedora's package)
 apps=.local/share/applications
+DESKTOP_COPIED=()
 if [[ -d $SRC/$apps ]]; then
   mkdir -p "$STAGE/$apps"
-  [[ -d $SRC/$apps/icons ]] && cp -r "$SRC/$apps/icons" "$STAGE/$apps/" && TOUCHED+=("$apps/icons")
+  if [[ -f $SRC/$apps/claude-code-url-handler.desktop ]]; then
+    cp "$SRC/$apps/claude-code-url-handler.desktop" "$STAGE/$apps/"
+    TOUCHED+=("$apps/claude-code-url-handler.desktop"); DESKTOP_COPIED+=(claude-code-url-handler.desktop)
+  fi
   shopt -s nullglob
-  for f in "$SRC/$apps"/*.desktop; do
+  for f in "$SRC/$apps"/userapp-Firefox-*.desktop; do
     name=${f##*/}
-    exe=$(sed -n 's/^Exec=//p' "$f" | head -n1)
-    exe=${exe//omarchy-/fh-}
-    if [[ -n $exe ]] && ! in_image "$exe"; then
-      DROPPED+=("$name (Exec: ${exe%% *})")
-      continue
-    fi
-    sed 's/omarchy-/fh-/g' "$f" > "$STAGE/$apps/$name"   # Icon=/home/<user>/... stays: /home resolves on Fedora
-    TOUCHED+=("$apps/$name")
+    sed -E 's|^(Try)?Exec=/opt/firefox-bin/firefox-bin|\1Exec=firefox|' "$f" > "$STAGE/$apps/$name"
+    TOUCHED+=("$apps/$name"); DESKTOP_COPIED+=("$name")
+    REWRITES+=("$apps/$name: Exec=/opt/firefox-bin/firefox-bin -> firefox")
   done
   shopt -u nullglob
-  REWRITES+=("$apps/*.desktop: omarchy- -> fh-; entries whose Exec is not in the image dropped")
 fi
 
 # --- 3. waybar -----------------------------------------------------------------------
@@ -434,7 +435,7 @@ echo
 echo "== copied (${#TOUCHED[@]})"; printf '  %s\n' "${TOUCHED[@]}"
 if (( ${#CREATED_DIRS[@]} )); then echo "== parent dirs created (${#CREATED_DIRS[@]})"; printf '  %s\n' "${CREATED_DIRS[@]}"; fi
 if (( ${#SKIPPED[@]} )); then echo "== not present in source, skipped"; printf '  %s\n' "${SKIPPED[@]}"; fi
-if (( ${#DROPPED[@]} )); then echo "== dropped .desktop files (binary not in the image)"; printf '  %s\n' "${DROPPED[@]}"; fi
+echo "== desktop files: ${DESKTOP_COPIED[*]:-(none)}"
 if (( ${#UNKNOWN_CMDS[@]} )); then echo "== commands not known to be in the image (kept, check them)"; printf '  %s\n' "${UNKNOWN_CMDS[@]}"; fi
 echo "== rewrites"; printf '  %s\n' "${REWRITES[@]}"
 cat <<EOF
