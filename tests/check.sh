@@ -175,9 +175,16 @@ check command -v direnv
 check bash -c 'HOME=$(mktemp -d) wsx --version'
 # no socket in the build container: waybar-docker must still emit a JSON module payload and exit 0
 check bash -c 'DOCKER_HOST=unix:///nonexistent timeout 10 waybar-docker | jq -e .class'
-check grep -q DOCKER_HOST /etc/environment.d/50-fedora-hypr.conf
-# environment.d expands ${XDG_RUNTIME_DIR} (it has no %t specifier); probe the real generator
-check bash -c 'XDG_RUNTIME_DIR=/run/user/1000 /usr/lib/systemd/user-environment-generators/30-systemd-environment-d-generator | grep -qx "DOCKER_HOST=unix:///run/user/1000/podman/podman.sock"'
+# Session env via uwsm's shell preloader (/usr/share/uwsm/env, found through XDG_DATA_DIRS):
+# ~/.local/bin on PATH for Waybar's custom modules, DOCKER_HOST with a real runtime dir.
+# environment.d must NOT carry either: it cannot expand $HOME/${XDG_RUNTIME_DIR}.
+check test -f /usr/share/uwsm/env
+check sh -n /usr/share/uwsm/env
+check grep -q XDG_DATA_DIRS /usr/libexec/uwsm/prepare-env.sh
+check bash -c '! grep -qE "^(DOCKER_HOST|PATH)=" /etc/environment.d/50-fedora-hypr.conf'
+check bash -c 'env -i HOME=/h XDG_RUNTIME_DIR=/run/user/1000 PATH=/usr/bin sh -c ". /usr/share/uwsm/env; test \"\$PATH\" = /h/.local/bin:/usr/bin && test \"\$DOCKER_HOST\" = unix:///run/user/1000/podman/podman.sock"'
+# idempotent: sourcing twice does not duplicate ~/.local/bin
+check bash -c 'env -i HOME=/h XDG_RUNTIME_DIR=/r PATH=/usr/bin sh -c ". /usr/share/uwsm/env; . /usr/share/uwsm/env; test \"\$PATH\" = /h/.local/bin:/usr/bin"'
 check test -f /usr/lib/systemd/user/podman.socket
 # podman-docker prints an "Emulate Docker CLI" banner on every docker call unless this file exists
 check test -f /etc/containers/nodocker

@@ -26,7 +26,8 @@ build/20-services.sh       systemctl enable/disable, authselect, cleanup; COPR r
 system/                    copied verbatim onto / in the image
   usr/bin/fh-*             ~100 helper scripts (menu, theme, capture, toggles, launchers, first-boot, update-check, screensaver)
   usr/bin/{wsx,waybar-docker}  Rust binaries from the rust-build stage (author's Waybar modules)
-  etc/environment.d/50-fedora-hypr.conf  FH_PATH, DOCKER_HOST (rootless podman socket for waybar-docker)
+  etc/environment.d/50-fedora-hypr.conf  FH_PATH only (environment.d cannot expand $HOME/${XDG_RUNTIME_DIR})
+  usr/share/uwsm/env       session env sourced by uwsm's sh preloader: ~/.local/bin on PATH, DOCKER_HOST (podman socket)
   usr/share/fedora-hypr/
     default/hypr/          canonical Hyprland config (autostart, bindings/, apps/, toggles/, envs, looknfeel…)
     default/{waybar,mako,swayosd,alacritty}/  canonical app configs (alacritty/ only has screensaver.toml so far)
@@ -248,6 +249,14 @@ A failed CI build is safe: the machine keeps its last good image.
   file with `getfattr -n security.selinux` for the right value). Prefer in-place edits from a running
   deployment whenever one still logs in.
 - `chsh` is missing from base-main (lost hardlink of `chfn`); `10-packages.sh` restores it.
+- **environment.d cannot reference the manager's own variables** (`$HOME`, `${XDG_RUNTIME_DIR}`): the
+  generator only expands what earlier environment.d files defined, so `DOCKER_HOST=unix://${XDG_RUNTIME_DIR}/…`
+  reached the session as that literal string (a check that pre-set `XDG_RUNTIME_DIR` for the generator hid
+  it). And Fedora's `/etc/profile` does not add `~/.local/bin` (Arch's does), so under uwsm — which builds
+  the session env by sourcing `/etc/profile` + `~/.profile` with `sh`, not zsh — Waybar could not find
+  user-installed tools (RadioBar). Session-wide env that needs expansion goes in `/usr/share/uwsm/env`
+  (uwsm looks in `XDG_CONFIG_HOME`, `XDG_CONFIG_DIRS`, `XDG_DATA_DIRS` for `uwsm/env`); `PATH` is on
+  uwsm's `always_export` list. Verify with `systemctl --user show-environment` on a booted system.
 
 ## Migrating a home from Omarchy
 

@@ -1,0 +1,18 @@
+# fedora-hypr session environment. uwsm's env preloader (/usr/libexec/uwsm/prepare-env.sh)
+# sources this with POSIX sh at login, after /etc/profile and ~/.profile, and exports the
+# result to the systemd user manager and the compositor; ~/.config/uwsm/env is the user's
+# own hook. Unlike environment.d this is a real shell, so $HOME/$XDG_RUNTIME_DIR expand.
+# (environment.d cannot see the manager's own variables — DOCKER_HOST used to sit there
+# and reached the session as the literal string "unix://${XDG_RUNTIME_DIR}/…".)
+
+# Fedora's /etc/profile does not add ~/.local/bin (bash's skel .bash_profile does, which
+# never runs here), so Waybar's custom modules could not find user-installed tools.
+case ":${PATH}:" in
+  *":${HOME}/.local/bin:"*) ;;
+  *) PATH="${HOME}/.local/bin:${PATH}" ;;
+esac
+export PATH
+
+# waybar-docker (and the docker CLI via podman-docker) talk to the rootless podman socket,
+# started by default/hypr/autostart.conf.
+export DOCKER_HOST="unix://${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/podman/podman.sock"
