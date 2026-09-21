@@ -130,15 +130,38 @@ CREATED_DIRS=() # parent dirs this run created under the target (chown + label, 
 RSYNC=(rsync -a --no-owner --no-group --mkpath)
 (( DRY )) && RSYNC+=(--dry-run)
 
-# copy <src-rel-path> [rsync excludes...]: plain rsync from SRC into TARGET, creating parents
+# copy <src-rel-path> [rsync excludes...]: plain rsync from SRC into TARGET, creating parents.
+# A symlink source is never rsynced: rsync would treat an existing destination symlink as a directory
+# to copy INTO, following it on the host filesystem (a second run once wrote a self-referencing link
+# into ~/dotfiles/astronvim that way). Links are recreated with ln instead.
 copy() {
   local rel=$1; shift
   local from=$SRC/$rel to=$TARGET/$rel
   if [[ ! -e $from && ! -L $from ]]; then SKIPPED+=("$rel"); return 0; fi
-  if [[ -d $from && ! -L $from ]]; then from=$from/ to=$to/; fi
+  if [[ -L $from ]]; then copy_link "$rel" "$(readlink "$from")"; return; fi
+  if [[ -L $to ]]; then
+    echo "WARNING: $rel skipped: the target has a symlink where a $( [[ -d $from ]] && echo directory || echo file ) is expected; remove it and re-run" >&2
+    return 0
+  fi
+  if [[ -d $from ]]; then from=$from/ to=$to/; fi
   "${RSYNC[@]}" "$@" -- "$from" "$to"
   TOUCHED+=("$rel")
   echo "copied  $rel"
+}
+# copy_link <rel> <link-target>: (re)create a symlink at TARGET/<rel>; replaces an existing symlink only
+copy_link() {
+  local rel=$1 link=$2 to
+  to=$TARGET/$rel
+  if [[ -e $to && ! -L $to ]]; then
+    echo "WARNING: $rel skipped: a real $( [[ -d $to ]] && echo directory || echo file ) already exists on the target where a symlink -> $link is expected" >&2
+    return 0
+  fi
+  if (( ! DRY )); then
+    mkdir -p "$(dirname "$to")"
+    ln -sfnT -- "$link" "$to"
+  fi
+  TOUCHED+=("$rel")
+  echo "linked  $rel -> $link"
 }
 
 # --- helpers for the rewritten copies ----------------------------------------------
@@ -477,7 +500,7 @@ if [[ -d $SRC/.config/btop ]]; then
   REWRITES+=(".config/btop/themes/current.theme -> ../../fedora-hypr/current/theme/btop.theme")
 fi
 copy RadioBar --exclude=/build --exclude=__pycache__
-# ~/.config/nvim is a symlink into ~/dotfiles: copied as a symlink (rsync -a); make sure it resolves
+# ~/.config/nvim is a symlink into ~/dotfiles: recreated as a symlink (copy_link); make sure it resolves
 if [[ -L $SRC/.config/nvim ]]; then
   copy .config/nvim
   link=$(readlink "$SRC/.config/nvim"); resolved=$link
@@ -493,12 +516,7 @@ copy .local/bin/env   # uv installer's PATH snippet, sourced (guarded) from .zsh
 # ~/.local/bin/radiobar: recreate as an absolute symlink. /home -> var/home on Fedora, so the
 # same /home/<user> path resolves there.
 if [[ -e $SRC/RadioBar/linux/radiobar ]]; then
-  if (( ! DRY )); then
-    mkdir -p "$TARGET/.local/bin"
-    ln -sfn "/home/$TARGET_USER/RadioBar/linux/radiobar" "$TARGET/.local/bin/radiobar"
-  fi
-  TOUCHED+=(.local/bin/radiobar)
-  echo "linked  .local/bin/radiobar -> /home/$TARGET_USER/RadioBar/linux/radiobar"
+  copy_link .local/bin/radiobar "/home/$TARGET_USER/RadioBar/linux/radiobar"
 fi
 
 # --- 6. write the staged tree ---------------------------------------------------------

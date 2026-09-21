@@ -338,6 +338,16 @@ check grep -q 'gaps_in = 5' "$hy/looknfeel.conf"
 before=$(cd "$home" && find . | sort | md5sum)
 check run
 check test "$before" = "$(cd "$home" && find . | sort | md5sum)"
+check test -L "$home/.config/nvim"                                              # still a symlink after run 2 ...
+check test "$(readlink "$home/.config/nvim")" = "$src/dotfiles/astronvim"          # ... with the same target
+check bash -c "! test -e '$src/dotfiles/astronvim/nvim'"                         # and nothing written through the link into the SOURCE
+check bash -c "! test -e '$home/dotfiles/astronvim/nvim'"
+check test "$(readlink "$home/.local/bin/radiobar")" = /home/eben/RadioBar/linux/radiobar
+# a real directory already at .config/nvim is left alone with a warning (M-4), the run still succeeds
+rm "$home/.config/nvim"; mkdir "$home/.config/nvim"; echo keep > "$home/.config/nvim/keep"
+check run
+check test -f "$home/.config/nvim/keep"
+check bash -c "! test -L '$home/.config/nvim'"
 check test "$(grep -c 'class<org.mozilla.firefox>' "$wb/config.jsonc")" = 1     # not duplicated on re-run
 check grep -q 'restorecon' "$out"
 
