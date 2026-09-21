@@ -159,6 +159,10 @@ check grep -q '"custom/update"' /usr/share/fedora-hypr/default/waybar/config.jso
 # print a false positive here — exit 1, empty stdout
 check bash -c '[ -z "$(fh-update-available)" ]'
 check bash -c 'fh-update-available; test $? -eq 1'
+# scoped sudoers rule: %wheel gets passwordless sudo for exactly this bootc status invocation
+check visudo -cf /etc/sudoers.d/fh-update-available
+check test "$(stat -c %a /etc/sudoers.d/fh-update-available)" = 440
+check grep -qF '/usr/sbin/bootc status --format json' /etc/sudoers.d/fh-update-available
 
 # --- GRUB drop-in (gfxterm + hidden menu)
 check test -f /usr/lib/bootupd/grub2-static/configs.d/05_terminal.cfg

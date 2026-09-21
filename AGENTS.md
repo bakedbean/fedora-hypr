@@ -107,11 +107,15 @@ signal 7, hourly `interval`) is an indicator only — it prints `staged`/`availa
 from the registry's (via `skopeo inspect`), else prints nothing and exits 1 so Waybar hides the
 module; results are cached under `${XDG_RUNTIME_DIR:-/tmp}/fh-update-available` for 10 minutes.
 Clicking it runs `fh-update` (= `bootc upgrade` + flatpak update) in a floating terminal, which
-clears the cache and signals Waybar to refresh. `bootc status` requires root; the script tries it
-unprivileged first (in case a future bootc relaxes this) then `sudo -n` (non-interactive, so it
-never hangs on a password prompt), and treats any failure as "up to date" — it never shows a false
-positive. No sudoers rule ships for this, so on a machine without passwordless `sudo bootc status`
-the indicator will only ever fire via the unprivileged path if bootc later supports it.
+clears the cache and signals Waybar to refresh. `bootc status` requires root, so
+`system/etc/sudoers.d/fh-update-available` grants `%wheel` passwordless sudo for exactly one
+command line — `/usr/sbin/bootc status --format json`, no arguments allowed to vary — and
+`fh-update-available` calls `sudo -n` that exact command (`-n` so it never hangs on a password
+prompt if the rule is somehow missing). It's scoped this tightly (one absolute binary path, one
+fixed argument list, read-only subcommand) so the access granted is exactly "read bootc status
+unprivileged", nothing else `bootc`/`sudo` can do. Any failure (rule missing, offline, skopeo
+digest mismatch check failing) is treated as "up to date" — the indicator never shows a false
+positive.
 
 ## Package sourcing
 

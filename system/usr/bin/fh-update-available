@@ -37,9 +37,12 @@ if [[ -f $CACHE ]]; then
   fi
 fi
 
-status=$(bootc status --format json 2>/dev/null) || status=$(sudo -n bootc status --format json 2>/dev/null) || status=
+# bootc status requires root; a scoped sudoers.d rule (system/etc/sudoers.d/fh-update-available)
+# grants %wheel passwordless sudo for exactly this command line. -n never prompts/hangs if that
+# rule is somehow missing.
+status=$(sudo -n /usr/sbin/bootc status --format json 2>/dev/null) || status=
 if [[ -z $status ]]; then
-  echo "fh-update-available: bootc status unavailable (needs root; no passwordless sudo configured)" >&2
+  echo "fh-update-available: sudo -n /usr/sbin/bootc status --format json failed" >&2
   emit none
 fi
 

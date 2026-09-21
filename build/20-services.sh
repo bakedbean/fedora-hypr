@@ -25,3 +25,4 @@ rm -rf /var/lib/authselect
 systemctl enable fh-first-boot-user.service
 systemctl enable fh-first-boot-flatpaks.service
 chmod 0440 /etc/sudoers.d/wheel
+chmod 0440 /etc/sudoers.d/fh-update-available
