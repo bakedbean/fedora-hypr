@@ -11,9 +11,11 @@
 #   --no-split    do not look for the "# CCI configuration" .. PROD_READ_ONLY_DSN block in .zshrc
 #                 (only for a .zshrc without it; the secret-pattern guard still refuses obvious secrets)
 #   --dry-run     mount read-only, rsync -n, write nothing
+# Env: FH_COLORS_FROM_ALACRITTY=<path> overrides the colors.toml converter (default: Omarchy's in ~/.local/share).
 #
 # Copies a curated set of dotfiles from the invoking user's home ($SUDO_USER) into
-# (~/.local/share/applications: only claude-code-url-handler.desktop and userapp-Firefox-*.desktop)
+# (~/.local/share/applications: only claude-code-url-handler.desktop and userapp-Firefox-*.desktop). User themes
+# under ~/.config/omarchy/themes and extra backgrounds land in ~/.config/fedora-hypr/{themes,backgrounds}.
 # <disk>/var/home/<user> (bootc keeps it under ostree/deploy/default/var when the raw
 # filesystem is mounted), rewriting Omarchy-isms to their fedora-hypr equivalents on the
 # way. Secrets in ~/.zshrc are split out into ~/.zshrc.local (mode 600). Idempotent.
@@ -345,6 +347,76 @@ if [[ -d $SRC/$hy ]]; then
   REWRITES+=("$hy/*.conf: omarchy- -> fh-; cliamp/claudette/'omarchy menu' lines dropped; signal/obsidian/typora/1password -> flatpak run")
 fi
 
+# --- 4b. user themes + backgrounds ---------------------------------------------------------------
+# Omarchy user themes (old per-app format, no colors.toml) -> ~/.config/fedora-hypr/themes/<name>/ where
+# fh-theme-set overlays them on the built-ins. Per-app files shipped by the theme win over the templates;
+# colors.toml is generated from alacritty.toml with Omarchy's own converter when it is available.
+FH_COLORS_FROM_ALACRITTY=${FH_COLORS_FROM_ALACRITTY:-$SRC/.local/share/omarchy/bin/omarchy-theme-colors-from-alacritty}
+THEME_KEEP=(backgrounds btop.theme icons.theme preview.png alacritty.toml waybar.css walker.css swayosd.css
+            hyprland.conf hyprlock.conf mako.ini chromium.theme image.png assets)
+THEMES_MIGRATED=() EXTRA_BACKGROUNDS=()
+oth=$SRC/.config/omarchy/themes
+fhc=.config/fedora-hypr
+if [[ -d $oth ]]; then
+  shopt -s nullglob
+  for tdir in "$oth"/*/; do
+    tname=$(basename "$tdir")
+    if [[ ! $tname =~ ^[a-z0-9-]+$ ]]; then
+      echo "WARNING: theme '$tname' skipped: fh-theme-set only accepts names matching ^[a-z0-9-]+$" >&2; continue
+    fi
+    tdest=$STAGE/$fhc/themes/$tname
+    mkdir -p "$tdest"
+    for item in "${THEME_KEEP[@]}"; do
+      [[ -e $tdir/$item ]] && cp -a "$tdir/$item" "$tdest/"
+    done
+    # rewrite Omarchy paths in the theme's text files (binaries such as backgrounds are left alone)
+    while IFS= read -r -d '' f; do
+      sed -i \
+        -e 's|~/\.local/share/omarchy/default|/usr/share/fedora-hypr/default|g' \
+        -e 's|\$HOME/\.local/share/omarchy/default|/usr/share/fedora-hypr/default|g' \
+        -e "s|/home/$SRC_USER/\.local/share/omarchy/default|/usr/share/fedora-hypr/default|g" \
+        -e 's|~/\.config/omarchy|~/.config/fedora-hypr|g' \
+        -e 's|\$HOME/\.config/omarchy|$HOME/.config/fedora-hypr|g' \
+        -e "s|/home/$SRC_USER/\.config/omarchy|/home/$SRC_USER/.config/fedora-hypr|g" \
+        "$f"
+    done < <(grep -rIl . "$tdest" --null 2>/dev/null || true)
+    if left=$(grep -rli omarchy "$tdest"); then
+      echo "refusing: theme '$tname' still references omarchy after rewriting, in:" >&2
+      printf '  %s\n' "${left//$STAGE\//}" >&2
+      exit 1
+    fi
+    colors=present
+    if [[ ! -f $tdest/colors.toml ]]; then
+      if [[ -x $FH_COLORS_FROM_ALACRITTY || -f $FH_COLORS_FROM_ALACRITTY ]] \
+         && bash "$FH_COLORS_FROM_ALACRITTY" "$tdest" >/dev/null 2>&1 && [[ -f $tdest/colors.toml ]]; then
+        colors=generated
+      else
+        colors=missing
+        echo "WARNING: theme '$tname': no colors.toml and the converter ($FH_COLORS_FROM_ALACRITTY) is absent or failed;" >&2
+        echo "         templates (gum, walker, ...) will not be rendered for it, its own per-app files still apply" >&2
+      fi
+    fi
+    TOUCHED+=("$fhc/themes/$tname"); THEMES_MIGRATED+=("$tname (colors.toml: $colors)")
+  done
+  shopt -u nullglob
+  REWRITES+=("$fhc/themes/*: ~/.local/share/omarchy/default -> /usr/share/fedora-hypr/default; ~/.config/omarchy -> ~/.config/fedora-hypr")
+fi
+# backgrounds the user added only to the current theme copy (not in the theme's own backgrounds/)
+CURRENT_THEME=
+[[ -f $SRC/.config/omarchy/current/theme.name ]] && CURRENT_THEME=$(tr -d '[:space:]' < "$SRC/.config/omarchy/current/theme.name")
+if [[ -n $CURRENT_THEME && -d $SRC/.config/omarchy/current/theme/backgrounds ]]; then
+  shopt -s nullglob
+  for bg in "$SRC/.config/omarchy/current/theme/backgrounds"/*; do
+    [[ -f $bg ]] || continue
+    [[ -e $oth/$CURRENT_THEME/backgrounds/${bg##*/} ]] && continue
+    mkdir -p "$STAGE/$fhc/backgrounds/$CURRENT_THEME"
+    cp -a "$bg" "$STAGE/$fhc/backgrounds/$CURRENT_THEME/"
+    EXTRA_BACKGROUNDS+=("${bg##*/}")
+  done
+  shopt -u nullglob
+  (( ${#EXTRA_BACKGROUNDS[@]} )) && TOUCHED+=("$fhc/backgrounds/$CURRENT_THEME")
+fi
+
 # --- 5. plain copies (after every rewrite has succeeded: a refusal above must leave the target untouched)
 copy .zprofile
 copy .gitconfig
@@ -352,7 +424,7 @@ copy .ssh
 copy .config/gh
 copy .oh-my-zsh
 for p in .config/starship.toml .config/tmux .config/lazygit .config/git \
-         .config/fastfetch .config/radiobar .local/share/fonts dotfiles; do
+         .config/fastfetch .config/radiobar .local/share/fonts dotfiles Wallpapers; do
   copy "$p"
 done
 # btop: btop.conf as-is (color_theme = "current"); themes/current.theme becomes a relative symlink to the
@@ -437,6 +509,8 @@ if (( ${#CREATED_DIRS[@]} )); then echo "== parent dirs created (${#CREATED_DIRS
 if (( ${#SKIPPED[@]} )); then echo "== not present in source, skipped"; printf '  %s\n' "${SKIPPED[@]}"; fi
 echo "== desktop files: ${DESKTOP_COPIED[*]:-(none)}"
 if (( ${#UNKNOWN_CMDS[@]} )); then echo "== commands not known to be in the image (kept, check them)"; printf '  %s\n' "${UNKNOWN_CMDS[@]}"; fi
+if (( ${#THEMES_MIGRATED[@]} )); then echo "== themes migrated"; printf '  %s\n' "${THEMES_MIGRATED[@]}"; fi
+if (( ${#EXTRA_BACKGROUNDS[@]} )); then echo "== extra backgrounds -> $fhc/backgrounds/$CURRENT_THEME"; printf '  %s\n' "${EXTRA_BACKGROUNDS[@]}"; fi
 echo "== rewrites"; printf '  %s\n' "${REWRITES[@]}"
 cat <<EOF
 == next steps
@@ -444,4 +518,5 @@ cat <<EOF
   2. sudo restorecon -Rv ~        (belt and braces for the SELinux labels set here$( (( LABEL_FAILED )) && echo "; REQUIRED: some labels failed"))
   3. open nvim once to let AstroNvim install its plugins
   4. fh-update if the image changed since the drive was installed
+$( [[ -n $CURRENT_THEME ]] && echo "  5. fh-theme-set $CURRENT_THEME   (your current theme; the image starts on tokyo-night)")
 EOF

@@ -54,6 +54,18 @@ echo 'x' > "$src/RadioBar/linux/radiobar"; chmod +x "$src/RadioBar/linux/radioba
 echo 'x' > "$src/RadioBar/build/junk"; echo 'x' > "$src/RadioBar/tools/__pycache__/junk.pyc"
 ln -s "$src/RadioBar/linux/radiobar" "$src/.local/bin/radiobar"
 echo 'x' > "$src/.local/share/fonts/f.ttf"
+# an old-format user theme + the current-theme copy with one extra background + Wallpapers
+th=$src/.config/omarchy/themes/my-theme
+mkdir -p "$th/backgrounds" "$src/.config/omarchy/current/theme/backgrounds" "$src/Wallpapers"
+printf '[colors.primary]\nbackground = "#191724"\nforeground = "#e0def4"\n' > "$th/alacritty.toml"
+printf 'include=~/.local/share/omarchy/default/mako/core.ini\n' > "$th/mako.ini"
+printf 'source = ~/.config/omarchy/current/theme/hyprland-extra.conf\n' > "$th/hyprland.conf"
+printf 'jpg' > "$th/backgrounds/a.jpg"; printf 'lua' > "$th/neovim.lua"; printf 'md' > "$th/README.md"
+echo my-theme > "$src/.config/omarchy/current/theme.name"
+printf 'jpg' > "$src/.config/omarchy/current/theme/backgrounds/a.jpg"; printf 'png' > "$src/.config/omarchy/current/theme/backgrounds/extra.png"
+printf 'png' > "$src/Wallpapers/w.png"
+# stub of omarchy-theme-colors-from-alacritty: writes colors.toml into the theme dir it is given
+fake_conv=$tmp/fake-colors; printf '#!/bin/bash\nprintf "[colors]\\nbackground = \\"#191724\\"\\n" > "$1/colors.toml"\n' > "$fake_conv"; chmod +x "$fake_conv"
 echo 'x' > "$src/.config/fish/config.fish"; echo x > "$src/.cargo/bin/waybar-docker"; echo x > "$src/.config/omarchy/x"
 echo 'x' > "$src/.local/share/applications/icons/Discord.png"
 cat > "$src/.local/share/applications/Discord.desktop" <<EOF
@@ -164,7 +176,7 @@ echo 'source = ~/.local/share/omarchy/default/hypr/autostart.conf' > "$src/.conf
 echo 'old' > "$src/.config/hypr/bindings.conf.bak.1"
 
 # --- run -----------------------------------------------------------------------
-run() { env SUDO_USER=fakeuser HOME="$src" bash "$script" --dest "$dest" "$@"; }
+run() { env SUDO_USER=fakeuser HOME="$src" FH_COLORS_FROM_ALACRITTY="$fake_conv" bash "$script" --dest "$dest" "$@"; }
 check run --dry-run
 check bash -c "! test -e '$home/.zshrc'"      # dry-run writes nothing
 out=$tmp/out.txt
@@ -218,6 +230,23 @@ check bash -c "! test -e '$home/RadioBar/tools/__pycache__'"
 check test -L "$home/.local/bin/radiobar"
 check test "$(readlink "$home/.local/bin/radiobar")" = /home/eben/RadioBar/linux/radiobar
 check test -f "$home/.local/share/fonts/f.ttf"
+# themes + backgrounds + wallpapers
+ft=$home/.config/fedora-hypr/themes/my-theme
+check test -f "$ft/alacritty.toml"
+check grep -qxF 'include=/usr/share/fedora-hypr/default/mako/core.ini' "$ft/mako.ini"
+check grep -qxF 'source = ~/.config/fedora-hypr/current/theme/hyprland-extra.conf' "$ft/hyprland.conf"
+check bash -c "! grep -rqi omarchy '$ft'"
+check bash -c "! test -e '$ft/neovim.lua'"
+check bash -c "! test -e '$ft/README.md'"
+check test -f "$ft/backgrounds/a.jpg"
+check test -f "$ft/colors.toml"                                   # written by the stubbed converter
+check grep -q 'my-theme (colors.toml: generated)' "$out"
+check test -f "$home/.config/fedora-hypr/backgrounds/my-theme/extra.png"
+check bash -c "! test -e '$home/.config/fedora-hypr/backgrounds/my-theme/a.jpg'"   # already in the theme itself
+check grep -q 'fh-theme-set my-theme' "$out"
+check test -f "$home/Wallpapers/w.png"
+check bash -c "! test -e '$home/.config/omarchy'"
+
 # never copied
 check bash -c "! test -e '$home/.config/fish'"
 check bash -c "! test -e '$home/.cargo'"
@@ -314,6 +343,19 @@ check refuse_case nostart
 check refuse_case noend
 check refuse_case leaked
 check refuse_case nosplit-secret --no-split
+# a theme with an un-rewritable omarchy reference refuses and leaves the target untouched
+bs=$tmp/src-badtheme; bd=$tmp/disk-badtheme; mkdir -p "$bs/.config/omarchy/themes/bad" "$bd/var/home/eben"
+printf '# plain\n' > "$bs/.zshrc"; echo x > "$bs/.zprofile"
+printf 'exec = ~/.local/share/omarchy/bin/omarchy-theme-bg-next\n' > "$bs/.config/omarchy/themes/bad/hyprland.conf"
+snap=$(find "$bd" | sort | md5sum)
+check bash -c "! env SUDO_USER=fakeuser HOME='$bs' bash '$script' --dest '$bd' --no-split"
+check test "$snap" = "$(find "$bd" | sort | md5sum)"
+# the converter being absent is a warning, not a failure
+ms=$tmp/src-noconv; md=$tmp/disk-noconv; mkdir -p "$ms/.config/omarchy/themes/plain" "$md/var/home/eben"
+printf '# plain\n' > "$ms/.zshrc"; printf 'x' > "$ms/.config/omarchy/themes/plain/alacritty.toml"
+check env SUDO_USER=fakeuser HOME="$ms" FH_COLORS_FROM_ALACRITTY=/nonexistent bash "$script" --dest "$md" --no-split
+check bash -c "! test -e '$md/var/home/eben/.config/fedora-hypr/themes/plain/colors.toml'"
+
 # --no-split with a clean .zshrc (no markers, no secrets) is accepted
 ns=$tmp/src-ok; nd=$tmp/disk-ok; mkdir -p "$ns" "$nd/var/home/eben"; printf '# plain\nalias l=ls\n' > "$ns/.zshrc"
 check env SUDO_USER=fakeuser HOME="$ns" bash "$script" --dest "$nd" --no-split
