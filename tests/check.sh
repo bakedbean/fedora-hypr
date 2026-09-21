@@ -46,6 +46,12 @@ check test "$(systemctl is-enabled sshd 2>/dev/null)" = disabled
 check test -f /usr/lib/systemd/system-preset/05-fedora-hypr.preset
 check grep -q '^disable sshd.service' /usr/lib/systemd/system-preset/05-fedora-hypr.preset
 check grep -q '^disable getty@tty1.service' /usr/lib/systemd/system-preset/05-fedora-hypr.preset
+# systemd-gpt-auto-generator's boot.automount (ESP automount, 120s idle timeout) wraps ostree's /boot bind
+# mount; once it idles out and re-triggers, the mount is torn down at shutdown before ostree-finalize-staged
+# runs ("Remounting /boot read-write: Invalid argument") and staged bootc upgrades are silently dropped
+check test -L /usr/lib/systemd/system/boot.automount
+check test "$(readlink /usr/lib/systemd/system/boot.automount)" = /dev/null
+check test "$(systemctl is-enabled boot.automount 2>/dev/null)" = masked
 check grep -q pam_fprintd /etc/pam.d/system-auth
 check grep -q 'fingerprint:enabled = true' /etc/skel/.config/hypr/hyprlock.conf
 check zsh -lc 'test "$FH_PATH" = /usr/share/fedora-hypr'

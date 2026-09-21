@@ -39,7 +39,7 @@ system/                    copied verbatim onto / in the image
     logo.txt               HYPEDORA half-block wordmark tte animates for the screensaver (see "Screensaver")
   etc/skel/                per-user seed; hyprland.conf sources the defaults then user overrides
   etc/greetd/config.toml   tuigreet → uwsm start -e -D Hyprland hyprland.desktop (RPM-owned session)
-  usr/lib/systemd/system/  fh-first-boot-user.service, fh-first-boot-flatpaks.service
+  usr/lib/systemd/system/  fh-first-boot-user.service, fh-first-boot-flatpaks.service, boot.automount -> /dev/null (see "Things that already bit us")
   usr/lib/systemd/system-preset/05-fedora-hypr.preset   disable sshd + getty@tty1 (survives first-boot preset-all)
   usr/share/plymouth/themes/hypedora/   boot splash (Omarchy's script-module theme, HYPEDORA wordmark); selected by etc/plymouth/plymouthd.conf
   usr/lib/bootc/kargs.d/10-fedora-hypr.toml   kernel args "quiet splash" (bootc applies at install, reconciles on upgrade)
@@ -273,6 +273,15 @@ A failed CI build is safe: the machine keeps its last good image.
   file with `getfattr -n security.selinux` for the right value). Prefer in-place edits from a running
   deployment whenever one still logs in.
 - `chsh` is missing from base-main (lost hardlink of `chfn`); `10-packages.sh` restores it.
+- **A staged `bootc upgrade` can be silently dropped at reboot.** `systemd-gpt-auto-generator` emits a
+  `boot.automount` ("EFI System Partition Automount", `TimeoutIdleSec=120`) that wraps ostree's `/boot` bind
+  mount. Once it idles out and is re-triggered, the mount instance belongs to the automount and is torn down at
+  shutdown *before* `ostree-finalize-staged` runs, which then fails with `Remounting /boot read-write: Invalid
+  argument` and the machine boots the old image again — `fh-update` looks like it did nothing. Symptom check:
+  `journalctl -b -1 -u ostree-finalize-staged`. The image masks the unit (`system/usr/lib/systemd/system/boot.automount
+  -> /dev/null`; `/usr/lib` beats `generator.late`); nothing needs the automount (root is `root=UUID=` on the cmdline,
+  bootupd mounts the ESP itself). On a machine still running an image without the mask, re-stage and reboot
+  *promptly* after boot while `/boot` is still the boot-time mount instance (`systemctl show boot.mount -p ActiveEnterTimestamp`).
 - Building **from a terminal inside the Hyprland session** leaks `NOTIFY_SOCKET` (uwsm's compositor unit
   is `Type=notify`, Hyprland passes it on) into `podman build`; crun bind-mounts the socket's directory
   into the build container, so the package layer ends up with an empty `/run/user/1000/systemd/notify`
