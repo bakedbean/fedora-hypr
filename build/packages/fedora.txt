@@ -38,6 +38,8 @@ alacritty
 zsh
 tmux
 neovim
+# nvim-treesitter (main) compiles parsers with cc; also mise/pip/cargo native builds
+gcc
 btop
 bat
 eza
