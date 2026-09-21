@@ -92,7 +92,7 @@ floating terminal prompts you to change it (`fh-setup-password`; also under Setu
 `fh-menu`) — the password is not expired at the PAM level because tuigreet cannot run the
 change-password conversation. SSH is disabled by default, so the window with the default password is
 local-only. The user and its default theme are created by `fh-first-boot-user.service` before greetd
-comes up, so the first session already has its colours and wallpaper. The Flatpak apps in `system/usr/share/fedora-hypr/flatpaks.txt` (Signal, Spotify, Obsidian,
+comes up, so the first session already has its colours and wallpaper. The Flatpak apps in `system/usr/share/fedora-hypr/flatpaks.txt` (Signal, Spotify,
 1Password, …) are installed in the background by `fh-first-boot-flatpaks.service` once the network is
 up; it retries every minute until every app is present. Watch it with
 `journalctl -fu fh-first-boot-flatpaks`. To turn SSH on: `sudo systemctl enable --now sshd` (a

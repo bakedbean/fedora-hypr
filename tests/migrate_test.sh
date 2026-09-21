@@ -165,6 +165,8 @@ bindd = SUPER SHIFT, W, Typora, exec, uwsm-app -- typora --enable-wayland-ime
 bindd = SUPER SHIFT, SLASH, Passwords, exec, uwsm-app -- 1password
 bindd = SUPER ALT, C, Claudette, exec, omarchy-launch-or-focus claudette-app
 bindd = SUPER SHIFT, A, ChatGPT, exec, omarchy-launch-webapp "https://chatgpt.com"
+bindd = SUPER SHIFT, C, Calendar, exec, omarchy-launch-webapp "https://app.hey.com/calendar/weeks/"
+bindd = SUPER SHIFT, E, Email, exec, omarchy-launch-webapp "https://app.hey.com"
 
 # Overwrite existing bindings, like putting Omarchy Menu on Super + Space
 # unbind = SUPER, SPACE
@@ -302,12 +304,10 @@ check bash -c "! grep -qi omarchy '$wb/style.css'"
 hy=$home/.config/hypr
 check bash -c "! grep -q 'omarchy-' '$hy/bindings.conf'"
 check bash -c "! grep -qi omarchy '$hy/bindings.conf'"
-check bash -c "! grep -q cliamp '$hy/bindings.conf'"
-check bash -c "! grep -q claudette '$hy/bindings.conf'"
+check bash -c "! grep -qiE 'obsidian|typora|hey\.com|claudette|cliamp' '$hy/bindings.conf'"
 check grep -q 'radiobar toggle' "$hy/bindings.conf"
 check grep -qF 'fh-launch-or-focus signal "uwsm-app -- flatpak run org.signal.Signal"' "$hy/bindings.conf"
-check grep -qF '"uwsm-app -- flatpak run md.obsidian.Obsidian"' "$hy/bindings.conf"
-check grep -qF 'uwsm-app -- flatpak run io.typora.Typora --enable-wayland-ime' "$hy/bindings.conf"
+check grep -qF 'ChatGPT' "$hy/bindings.conf"     # neighbouring webapp binds survive the filter
 check grep -qF 'uwsm-app -- flatpak run com.onepassword.OnePassword' "$hy/bindings.conf"
 check grep -qF 'fh-launch-webapp "https://chatgpt.com"' "$hy/bindings.conf"
 for f in input looknfeel monitors envs autostart; do check test -f "$hy/$f.conf"; done

@@ -199,7 +199,7 @@ theme switching, sshd off. CI publishes to ghcr.
 
 Not yet verified (needs the Framework 12): Wi-Fi via impala, brightness/volume keys, suspend/resume,
 fingerprint (`fh-setup-fingerprint`; PAM `with-fingerprint` is enabled), touchpad gestures, Flatpak
-app class names in `default/hypr/apps/*.conf` (1Password/LocalSend/Typora may differ under Flatpak),
+app class names in `default/hypr/apps/*.conf` (1Password/LocalSend may differ under Flatpak),
 `bootc upgrade` → `bootc rollback` round trip. Record hardware findings under "Framework 12 notes" in README.
 
 Known deferred minors: `fh-brightness-display-apple` needs unpackaged `asdcontrol`; keybindings viewer

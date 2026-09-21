@@ -1,7 +1,5 @@
 org.signal.Signal
 com.spotify.Client
-md.obsidian.Obsidian
-io.typora.Typora
 org.libreoffice.LibreOffice
 com.obsproject.Studio
 org.kde.kdenlive

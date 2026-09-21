@@ -329,12 +329,12 @@ if [[ -d $SRC/$hy ]]; then
   mkdir -p "$STAGE/$hy"
   for f in bindings input looknfeel monitors envs autostart; do
     [[ -f $SRC/$hy/$f.conf ]] || { SKIPPED+=("$hy/$f.conf"); continue; }
-    grep -v -e cliamp -e claudette -e '[Oo]marchy [Mm]enu' "$SRC/$hy/$f.conf" \
+    # dropped: binds for apps the author no longer uses / the image lacks, and Omarchy-menu comment lines
+    grep -v -i -E -e '^[[:space:]]*bindd?[[:space:]]*=.*(obsidian|typora|hey\.com|claudette|cliamp)' \
+                  -e 'omarchy menu' "$SRC/$hy/$f.conf" \
       | sed \
           -e 's|omarchy-|fh-|g' \
           -e 's|uwsm-app -- signal-desktop|uwsm-app -- flatpak run org.signal.Signal|g' \
-          -e 's|uwsm-app -- obsidian|uwsm-app -- flatpak run md.obsidian.Obsidian|g' \
-          -e 's|uwsm-app -- typora|uwsm-app -- flatpak run io.typora.Typora|g' \
           -e 's|uwsm-app -- 1password|uwsm-app -- flatpak run com.onepassword.OnePassword|g' \
           -e '/^[[:space:]]*#/ s|[Oo]marchy|fedora-hypr|g' \
       > "$STAGE/$hy/$f.conf" || true
@@ -344,7 +344,7 @@ if [[ -d $SRC/$hy ]]; then
       echo "WARNING: $hy/$f.conf still mentions omarchy; review by hand" >&2
     fi
   done
-  REWRITES+=("$hy/*.conf: omarchy- -> fh-; cliamp/claudette/'omarchy menu' lines dropped; signal/obsidian/typora/1password -> flatpak run")
+  REWRITES+=("$hy/*.conf: omarchy- -> fh-; binds for obsidian/typora/hey.com/claudette/cliamp and 'omarchy menu' lines dropped; signal/1password -> flatpak run")
 fi
 
 # --- 4b. user themes + backgrounds ---------------------------------------------------------------
