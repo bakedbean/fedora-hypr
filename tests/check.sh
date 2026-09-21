@@ -10,7 +10,7 @@ for b in Hyprland hyprlock hypridle hyprpicker hyprsunset uwsm \
          alacritty starship lazygit mise impala bluetui wiremix gum greetd tuigreet \
          gpu-screen-recorder hyprland-preview-share-picker firefox nautilus \
          zsh chsh nvim btop bat eza fd rg zoxide jq dust tldr fastfetch magick \
-         fcitx5 flatpak cc gcc; do
+         fcitx5 flatpak cc gcc make; do
   check command -v "$b"
 done
 check test -x /usr/libexec/hyprpolkitagent
