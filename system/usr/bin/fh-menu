@@ -1,5 +1,5 @@
 #!/bin/bash
-# Adapted from Omarchy (MIT) — https://github.com/basecamp/omarchy
+# Adapted from third-party MIT-licensed code; see LICENSE-THIRD-PARTY in the source repo
 #
 # Trimmed for fedora-hypr: keeps only Apps, Learn, Trigger (Capture, Toggle),
 # Style (Theme, Background, Screensaver), Setup (Wifi, Bluetooth, Audio, Power profile,

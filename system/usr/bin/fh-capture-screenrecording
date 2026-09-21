@@ -1,5 +1,5 @@
 #!/bin/bash
-# Adapted from Omarchy (MIT) — https://github.com/basecamp/omarchy
+# Adapted from third-party MIT-licensed code; see LICENSE-THIRD-PARTY in the source repo
 
 #
 # Env: FH_SCREENRECORD_USE_PORTAL=true skips the built-in slurp picker and

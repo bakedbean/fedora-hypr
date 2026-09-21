@@ -1,5 +1,5 @@
 #!/bin/bash
-# Adapted from Omarchy (MIT) — https://github.com/basecamp/omarchy
+# Adapted from third-party MIT-licensed code; see LICENSE-THIRD-PARTY in the source repo
 # Tell btop to reload its config. -x: this script's own comm ("fh-restart-btop")
 # would otherwise match the pattern and signal itself.
 

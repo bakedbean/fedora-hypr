@@ -134,7 +134,7 @@ check bash -c '
   out=$(XTE_DEBUG=1 xdg-terminal-exec --app-id=x -e true 2>&1)
   ! grep -q "has no TerminalArgAppId" <<<"$out" && grep -q -- "--class=x" <<<"$out"'
 check bash /tests/binds_test.sh
-check bash -c '! grep -rl omarchy /usr/share/fedora-hypr/default /etc/skel | grep -v LICENSE'
+check bash -c '! grep -rli omarchy /usr/share/fedora-hypr /etc/skel /usr/bin/fh-* /usr/share/plymouth'
 check test -f /usr/share/fedora-hypr/default/mako/core.ini
 check grep -q "fedora-hypr/current/theme/alacritty.toml" /etc/skel/.config/alacritty/alacritty.toml
 check bash -c 'sed "s|//.*||" /usr/share/fedora-hypr/default/waybar/config.jsonc | jq .'
@@ -154,7 +154,7 @@ check grep -q fh-setup-fingerprint /usr/bin/fh-menu
 check bash /tests/scripts_test.sh
 check grep -q 'exec-once = uwsm-app -- elephant' /usr/share/fedora-hypr/default/hypr/autostart.conf
 
-# --- Screensaver: tte (terminaltexteffects) port of Omarchy's terminal screensaver
+# --- Screensaver: tte (terminaltexteffects) terminal screensaver
 check command -v tte fh-launch-screensaver fh-screensaver fh-toggle-screensaver fh-branding-screensaver
 check bash -c 'tte --version'
 check test -s /usr/share/fedora-hypr/logo.txt
@@ -249,11 +249,10 @@ check bash -c 'fc-list | grep -qi cantarell'   # Font= in hypedora.plymouth
 check test "$(plymouth-set-default-theme)" = hypedora
 check bash -c 'plymouth-set-default-theme --list | grep -qx hypedora'
 check grep -q '^Theme=hypedora' /etc/plymouth/plymouthd.conf
-# the logo is the Omarchy-style wordmark: same height, wider (8 letters); regenerate with tools/gen-plymouth-logo.py
+# the logo is the upstream-style wordmark: same height, wider (8 letters); regenerate with tools/gen-plymouth-logo.py
 check bash -c 'read -r w h < <(magick identify -format "%w %h" /usr/share/plymouth/themes/hypedora/logo.png); test "$h" = 188 && test "$w" -gt 800'
-# ported theme carries only the attribution line
-check bash -c 'test "$(grep -ril omarchy /usr/share/plymouth)" = /usr/share/plymouth/themes/hypedora/hypedora.script'
-check bash -c 'test "$(grep -ic omarchy /usr/share/plymouth/themes/hypedora/hypedora.script)" = 1 && grep -q "^# Adapted from Omarchy (MIT)" /usr/share/plymouth/themes/hypedora/hypedora.script'
+# ported theme script carries the third-party attribution line and nothing naming the source
+check grep -q "^# Adapted from third-party MIT-licensed code; see LICENSE-THIRD-PARTY" /usr/share/plymouth/themes/hypedora/hypedora.script
 # theme is inside the shipped initramfs (rebuilt by build/15-initramfs.sh)
 check bash -c 'KVER=$(ls /usr/lib/modules | head -1); lsinitrd "/usr/lib/modules/$KVER/initramfs.img" | grep -q hypedora/logo.png'
 check bash -c 'KVER=$(ls /usr/lib/modules | head -1); lsinitrd "/usr/lib/modules/$KVER/initramfs.img" | grep -q lib64/plymouth/script.so'

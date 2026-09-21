@@ -1,3 +1,13 @@
+Third-party notice
+==================
+
+Parts of this project (the fh-* helper scripts, theme engine and themes, default
+Hyprland/Waybar configs and the Plymouth boot-splash script) are adapted from
+Omarchy (https://github.com/basecamp/omarchy), distributed under the MIT license
+reproduced below. Files carrying adapted code point here from their header.
+
+----------------------------------------------------------------------
+
 Copyright (c) David Heinemeier Hansson
 
 Permission is hereby granted, free of charge, to any person obtaining

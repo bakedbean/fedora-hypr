@@ -1,5 +1,5 @@
 #!/bin/bash
-# Adapted from Omarchy (MIT) — https://github.com/basecamp/omarchy
+# Adapted from third-party MIT-licensed code; see LICENSE-THIRD-PARTY in the source repo
 
 
 hyprctl monitors -j | jq -e '.[] | select(.focused == true) | select(.make == "Apple Computer Inc" and (.model | test("StudioDisplay|ProDisplayXDR|Studio XDR")))' >/dev/null

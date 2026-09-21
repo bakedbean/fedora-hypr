@@ -1,5 +1,5 @@
 #!/bin/bash
-# Adapted from Omarchy (MIT) — https://github.com/basecamp/omarchy
+# Adapted from third-party MIT-licensed code; see LICENSE-THIRD-PARTY in the source repo
 #
 # Launch the fedora-hypr screensaver in Alacritty (the only terminal this image
 # ships) on every monitor, with the correct font configuration.

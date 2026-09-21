@@ -7,8 +7,8 @@ bitten us*.
 
 ## What this is
 
-A Fedora **bootc** (image-mode) desktop that boots into an **Omarchy-flavored Hyprland**
-session. The whole OS is defined by this repo: `Containerfile` → OCI image →
+A Fedora **bootc** (image-mode) desktop that boots into an opinionated **Hyprland**
+session (branded HYPEDORA). The whole OS is defined by this repo: `Containerfile` → OCI image →
 `ghcr.io/bakedbean/fedora-hypr:44` → installed with `bootc install`, updated with
 `bootc upgrade`, rolled back with `bootc rollback`. Target hardware is a Framework 12
 (Intel); proving ground is an external USB drive and a QEMU VM.
@@ -44,14 +44,14 @@ system/                    copied verbatim onto / in the image
   etc/greetd/config.toml   tuigreet → uwsm start -e -D Hyprland hyprland.desktop (RPM-owned session)
   usr/lib/systemd/system/  fh-first-boot-user.service, fh-first-boot-flatpaks.service, boot.automount -> /dev/null (see "Things that already bit us")
   usr/lib/systemd/system-preset/05-fedora-hypr.preset   disable sshd + getty@tty1 (survives first-boot preset-all)
-  usr/share/plymouth/themes/hypedora/   boot splash (Omarchy's script-module theme, HYPEDORA wordmark); selected by etc/plymouth/plymouthd.conf
+  usr/share/plymouth/themes/hypedora/   boot splash (script-module Plymouth theme, HYPEDORA wordmark); selected by etc/plymouth/plymouthd.conf
   usr/lib/bootc/kargs.d/10-fedora-hypr.toml   kernel args "quiet splash" (bootc applies at install, reconciles on upgrade)
   usr/share/glib-2.0/schemas/10-fedora-hypr.gschema.override   system-wide GSettings defaults (Nautilus/GTK show hidden files); compiled in 20-services.sh
 tests/check.sh             in-image self-check (~170 checks); runs theme_test.sh, scripts_test.sh, binds_test.sh
 tests/migrate_test.sh      HOST-side test of tools/migrate-home.sh on a fabricated home (make test-migrate)
-tools/migrate-home.sh      copies the author's Omarchy home onto a target drive (see "Migrating a home from Omarchy")
+tools/migrate-home.sh      copies the author's old home onto a target drive (see "Migrating a home")
 tools/bump-base.sh         re-pins the Containerfile FROM digests (weekly CI run commits the result; `make bump-base` locally)
-tools/gen-plymouth-logo.py regenerates the HYPEDORA logo.png from Omarchy's logo (see "Boot splash")
+tools/gen-plymouth-logo.py regenerates the HYPEDORA logo.png from the upstream wordmark (see "Boot splash")
 tools/gen-screensaver-logo.py  regenerates logo.txt (half-block ASCII) reusing gen-plymouth-logo.py's glyph code (see "Screensaver")
 vm.sh / make vm            QEMU smoke test (see Debugging)
 .github/workflows/build.yml  test-migrate (host) → build (registry layer cache) → check → push :44 and :44-YYYYMMDD on push to main + weekly (weekly also re-pins bases and commits)
@@ -105,8 +105,11 @@ Fedora release bump = change the `FROM` tag (`TAG` is derived from it everywhere
 
 - Login shell is **zsh** (the author's shell); `FH_PATH` reaches it via `/etc/profile.d` → `/etc/zprofile`.
 - Helper scripts are `fh-*` in `system/usr/bin`, `#!/usr/bin/env bash`, executable,
-  `shellcheck -S error` clean. Ported ones carry `# Adapted from Omarchy (MIT) — https://github.com/basecamp/omarchy`
-  as line 2. **No other `omarchy` strings anywhere in `system/`** (case-insensitive; filenames too).
+  `shellcheck -S error` clean. Ported ones carry
+  `# Adapted from third-party MIT-licensed code; see LICENSE-THIRD-PARTY in the source repo` as line 2
+  (that file holds the upstream copyright + MIT notice, the only place the upstream project is named).
+  **No `omarchy` strings anywhere in `system/`** (case-insensitive; filenames too); `tests/check.sh` and
+  `tests/scripts_test.sh` enforce both.
 - `$FH_PATH=/usr/share/fedora-hypr`; every script defaults it: `: "${FH_PATH:=/usr/share/fedora-hypr}"`.
   User state: `~/.config/fedora-hypr/{current/{theme,theme.name,background},themes,themed,hooks}`,
   toggles in `~/.local/state/fedora-hypr/toggles/hypr/`.
@@ -156,12 +159,12 @@ positive.
 
 ## Boot splash
 
-`system/usr/share/plymouth/themes/hypedora/` is Omarchy's Plymouth theme (`ModuleName=script`: centred
+`system/usr/share/plymouth/themes/hypedora/` is the upstream Plymouth theme (`ModuleName=script`: centred
 logo, fake-then-real progress bar, LUKS password dialog) with `hypedora.script` verbatim apart from the
 attribution line, and the same asset PNGs. `logo.png` (869×188) reads **HYPEDORA** in the identical
-pixel style: `tools/gen-plymouth-logo.py` recovers the 81×19 cell grid of Omarchy's `logo.png` (pitch 79/8 px),
+pixel style: `tools/gen-plymouth-logo.py` recovers the 81×19 cell grid of the upstream `logo.png` (pitch 79/8 px),
 cuts the letters, derives P (R minus its leg), E (C plus a middle bar) and D (O with a straight left stem),
-recomposes with the original 2-cell spacing and colour, and self-checks by regenerating OMARCHY against the
+recomposes with the original 2-cell spacing and colour, and self-checks by regenerating the source wordmark against the
 source (mean alpha diff 1/255). Run it in a container if Pillow/numpy are missing on the host (usage in
 its docstring); `docs/hypedora-logo-preview.png` is the 2× preview on the splash background.
 Three pieces make it show up: `system/etc/plymouth/plymouthd.conf` (`Theme=hypedora`, the file
@@ -183,7 +186,7 @@ initramfs, kargs parse); not yet seen on a real boot — if the splash does not 
 
 ## Screensaver
 
-Ported from Omarchy's `omarchy-launch-screensaver`/`omarchy-screensaver`: `fh-launch-screensaver`
+Ported from the upstream launch-screensaver/screensaver pair: `fh-launch-screensaver`
 opens a fullscreen Alacritty (`--class=org.fedorahypr.screensaver`, `--config-file
 /usr/share/fedora-hypr/default/alacritty/screensaver.toml`) on every monitor running
 `fh-screensaver`, which loops `tte -i ~/.config/fedora-hypr/branding/screensaver.txt --random-effect
@@ -192,10 +195,10 @@ Only the Alacritty branch was ported (ghostty/foot/kitty are not shipped). `tte`
 `terminaltexteffects`, pulled from the `agaspar/omedora-4` COPR (`build/repos/agaspar-omedora-4.repo`
 `includepkgs`, `build/packages/copr.txt`). `fh-toggle-screensaver` flips the
 `screensaver-off` state toggle `fh-launch-screensaver` checks; `fh-branding-screensaver text|reset`
-edits or restores the wordmark (Omarchy's third mode, `image`, needs `omarchy-transcode-ascii`,
-which was never ported as `fh-transcode-ascii`, so it was dropped). `fh-system-lock` kills any
+edits or restores the wordmark (upstream's third mode, `image`, needs a transcode-ascii helper
+that was never ported as `fh-transcode-ascii`, so it was dropped). `fh-system-lock` kills any
 running screensaver (`pkill -f org.fedorahypr.screensaver`) so it never fights the lock screen, and
-hypridle's skel config starts the screensaver at Omarchy's 150s timeout before locking at 152s
+hypridle's skel config starts the screensaver at the upstream 150s timeout before locking at 152s
 (screensaver activity resets hypridle's own idle timer, hence "half + 2s margin" rather than
 150+300). The window rule lives in its own `default/hypr/apps/screensaver.conf` (fullscreen, float,
 slide animation), sourced from `apps.conf`.
@@ -209,8 +212,8 @@ alpha channel in, same text out); run it the same way as `gen-plymouth-logo.py` 
 missing on the host. `fh-first-run` seeds `~/.config/fedora-hypr/branding/screensaver.txt` from
 `$FH_PATH/logo.txt` if the user doesn't have one yet (mirrors its theme-seeding step); `/etc/skel`
 also carries a pre-seeded copy so a freshly created account has it before first login.
-`tools/migrate-home.sh` only copies an Omarchy user's `~/.config/omarchy/branding/screensaver.txt`
-across if it differs from Omarchy's own stock `~/.local/share/omarchy/logo.txt` — i.e. they
+`tools/migrate-home.sh` only copies the old home's `~/.config/omarchy/branding/screensaver.txt`
+across if it differs from that install's stock `~/.local/share/omarchy/logo.txt` — i.e. they
 customised it — otherwise it leaves fedora-hypr's HYPEDORA default in place.
 
 ## Package sourcing
@@ -263,7 +266,7 @@ A failed CI build is safe: the machine keeps its last good image.
 - Walker 2.x needs the `elephant` daemon; both are started from `autostart.conf`.
 - `xdg-terminal-exec` needs `X-TerminalArg*` keys in the terminal's `.desktop` (shipped in skel).
 - `pkill <name>` can match the calling `fh-restart-<name>` script; use `pkill -x`.
-- Omarchy's theme engine builds a sed script from `colors.toml`; values are escaped for `\ | &`
+- The theme engine builds a sed script from `colors.toml`; values are escaped for `\ | &`
   and theme names are whitelisted (`^[a-z0-9-]+$`) — keep both.
 - The Containerfile copies `system/` **after** the package layer on purpose; don't move it.
 - Starting `Hyprland` directly (not via `start-hyprland` / `uwsm start … hyprland.desktop`) triggers a startup banner in 0.56+.
@@ -287,8 +290,12 @@ A failed CI build is safe: the machine keeps its last good image.
   argument` and the machine boots the old image again — `fh-update` looks like it did nothing. Symptom check:
   `journalctl -b -1 -u ostree-finalize-staged`. The image masks the unit (`system/usr/lib/systemd/system/boot.automount
   -> /dev/null`; `/usr/lib` beats `generator.late`); nothing needs the automount (root is `root=UUID=` on the cmdline,
-  bootupd mounts the ESP itself). On a machine still running an image without the mask, re-stage and reboot
-  *promptly* after boot while `/boot` is still the boot-time mount instance (`systemctl show boot.mount -p ActiveEnterTimestamp`).
+  bootupd mounts the ESP itself). The same automount has a second symptom on a machine still running an image
+  without the mask: once `/boot` has idled out to a bare autofs trigger, `bootc upgrade`/`bootc status` fail with
+  `Initializing storage: opendir(boot): Operation not permitted` (bootc enters its own mount namespace and can't
+  trigger the automount from there; an `ls /boot` from a plain shell can). Fix for that one upgrade:
+  `sudo systemctl stop boot.automount && sudo systemctl start boot.mount` (plain mount, no automount), then
+  `bootc upgrade` and reboot promptly.
 - Building **from a terminal inside the Hyprland session** leaks `NOTIFY_SOCKET` (uwsm's compositor unit
   is `Type=notify`, Hyprland passes it on) into `podman build`; crun bind-mounts the socket's directory
   into the build container, so the package layer ends up with an empty `/run/user/1000/systemd/notify`
@@ -303,9 +310,9 @@ A failed CI build is safe: the machine keeps its last good image.
   (uwsm looks in `XDG_CONFIG_HOME`, `XDG_CONFIG_DIRS`, `XDG_DATA_DIRS` for `uwsm/env`); `PATH` is on
   uwsm's `always_export` list. Verify with `systemctl --user show-environment` on a booted system.
 
-## Migrating a home from Omarchy
+## Migrating a home
 
-`tools/migrate-home.sh` copies the author's dotfiles from the Omarchy machine onto a fedora-hypr drive
+`tools/migrate-home.sh` copies the author's dotfiles from the old Omarchy machine onto a fedora-hypr drive
 (`sudo tools/migrate-home.sh /dev/sdX3`, or `--dest DIR` for an already-mounted disk; `--dry-run` first).
 It copies shell (`.zshrc` split so the secrets block lands in `~/.zshrc.local`, mode 600), `.ssh`, oh-my-zsh,
 tmux/btop/lazygit/git/fastfetch/starship, `dotfiles` + the `.config/nvim` symlink (AstroNvim), RadioBar, fonts,
@@ -321,22 +328,24 @@ no root) covers the rewrites on a fabricated home. **SELinux caveat**: a non-SEL
 files, so as root the script sets `security.selinux` (`user_home_t`, `ssh_home_t` for `.ssh`) on everything
 it copied and chowns to 1000:1000; still run `sudo restorecon -Rv ~` after the first login. On a raw bootc
 disk the home is under `ostree/deploy/default/var/home/<user>`; the script finds either layout.
-`tools/` and `tests/` may say "omarchy" (they rewrite it); `system/` still must not.
+This tool, its test, `tools/gen-*-logo.py` (source-image paths) and the historical docs under `docs/superpowers/`
+are the only places the upstream project's name is allowed outside `LICENSE-THIRD-PARTY`; `system/` must not say it.
 
 ## Reference material on the host (read-only)
 
-- Omarchy 3.8.5 install: `~/.local/share/omarchy` (`bin/`, `default/`, `themes/`, `config/`).
+- Upstream (Omarchy 3.8.5) install: `~/.local/share/omarchy` (`bin/`, `default/`, `themes/`, `config/`).
   When porting a script: copy, apply the path sed used in the plan (Task 7), rename `omarchy-`→`fh-`,
-  drop Arch/pacman/limine/snapper call sites, add the attribution line.
-- The author's current Omarchy config: `~/.config/hypr`, `~/.config/waybar`, `~/.config/walker`.
-- Omarchy is MIT (`LICENSE.omarchy`).
+  drop Arch/pacman/limine/snapper call sites, add the attribution line, and leave no other upstream
+  strings behind (the tests fail on them).
+- The author's current upstream config: `~/.config/hypr`, `~/.config/waybar`, `~/.config/walker`.
+- Upstream is MIT; its notice is `LICENSE-THIRD-PARTY` (keep it — MIT requires the notice to travel with adapted code).
 
 ## Current state and open items
 
 **Lua config migration (blocking Hyprland ≥0.57):** Hyprland deprecates the `.conf`/hyprlang
 format in 0.56 and removes it in 0.57 (https://hypr.land/news/26_lua/). All of `default/hypr/**`
 and skel are `.conf`; Hyprland is pinned to 0.56.x in `build/packages/copr.txt` until this is done.
-Plan: wait for Omarchy to migrate its defaults, then re-port from theirs (tools:
+Plan: wait for upstream to migrate its defaults, then re-port from theirs (tools:
 https://github.com/loeclos/hypr-migrate). The deprecation banner at login is expected until then.
 
 Done and verified in the VM: first boot (user, theme render, Flatpaks in background), tuigreet login,

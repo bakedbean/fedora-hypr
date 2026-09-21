@@ -1,9 +1,13 @@
+<p align="center">
+  <img src="docs/hypedora-logo.png" alt="HYPEDORA" width="320">
+</p>
+
 # fedora-hypr
 
-A [bootc](https://containers.github.io/bootc/) image, built on `ghcr.io/ublue-os/base-main`, that boots
-into an Omarchy-flavored Hyprland desktop on Fedora. It replaces Omarchy's Arch/pacman base with an
-immutable, container-built, atomically-updated Fedora image while keeping the same look, keybindings,
-theming, and helper-script workflow.
+**HYPEDORA** — a [bootc](https://containers.github.io/bootc/) image, built on `ghcr.io/ublue-os/base-main`,
+that boots into an opinionated Hyprland desktop on Fedora: an immutable, container-built,
+atomically-updated image with a curated look, keybindings, a theme engine, and a helper-script
+workflow driven from a single menu.
 
 ## Host prereqs
 
@@ -112,12 +116,12 @@ up; it retries every minute until every app is present. Watch it with
   apply. `/home` is untouched by upgrades and rollbacks.
 - `sudo bootc switch ghcr.io/bakedbean/fedora-hypr:44-YYYYMMDD` — pin to a specific known-good dated
   build instead of tracking the rolling `:44` tag; switch back to `:44` later to resume tracking.
-- Boot splash: the image ships a Plymouth theme (`hypedora`, Omarchy's splash with a HYPEDORA wordmark)
+- Boot splash: the image ships a Plymouth theme (`hypedora`: centred HYPEDORA wordmark and progress bar)
   and the `quiet splash` kernel args in `/usr/lib/bootc/kargs.d/10-fedora-hypr.toml`. bootc applies
   `kargs.d` on install and reconciles it on upgrade, so installs made before the theme landed get the
   args with their next `fh-update`; if the splash still doesn't show, check with `rpm-ostree kargs` and
   add them once with `sudo rpm-ostree kargs --append=quiet --append=splash` (then reboot).
-- Screensaver: an Alacritty-based terminal screensaver (Omarchy's, animated by `tte` from
+- Screensaver: an Alacritty-based terminal screensaver (animated by `tte` from
   `terminaltexteffects`) starts after 2.5 minutes idle and shows the HYPEDORA wordmark
   (`~/.config/fedora-hypr/branding/screensaver.txt`, seeded from `logo.txt`) with a random text
   effect; the system locks 2 minutes after that. Toggle it off with Trigger → Toggle → Screensaver
@@ -156,7 +160,7 @@ fedora-hypr/
 │   ├── usr/lib/tmpfiles.d/        # /var/cache/tuigreet
 │   ├── usr/lib/systemd/system-preset/ # keep sshd/getty@tty1 disabled through first-boot preset-all
 │   ├── usr/lib/bootc/kargs.d/     # quiet splash
-│   ├── usr/share/plymouth/themes/hypedora/  # boot splash (Omarchy's theme, HYPEDORA logo; tools/gen-plymouth-logo.py)
+│   ├── usr/share/plymouth/themes/hypedora/  # boot splash (HYPEDORA logo; tools/gen-plymouth-logo.py)
 │   └── etc/
 │       ├── skel/.config/          # thin per-user config seeded on first login, sources the defaults
 │       │                            # (hypridle.conf / hyprlock.conf live here: both only search ~/.config/hypr)
@@ -165,13 +169,13 @@ fedora-hypr/
 │       ├── plymouth/plymouthd.conf # Theme=hypedora
 │       └── ...                    # NetworkManager, environment.d, sudoers.d, profile.d
 ├── tests/                       # check.sh (in-image self-check) + scripts_test.sh, theme_test.sh, binds_test.sh
-├── tools/                       # migrate-home.sh (Omarchy home → drive), gen-plymouth-logo.py (HYPEDORA wordmark)
+├── tools/                       # migrate-home.sh (existing home → drive), gen-plymouth-logo.py (HYPEDORA wordmark)
 ├── vm.sh                        # install-to-raw-disk + QEMU boot for local smoke testing
 ├── Makefile                     # build / shell / check / push / vm targets
 └── .github/workflows/build.yml  # CI: build, self-check, push to ghcr.io
 ```
 
-Three layers, same split Omarchy uses:
+Three layers:
 
 - **Image layer** (`Containerfile`, `build/`): what's installed. Change = rebuild + `bootc upgrade`.
 - **System layer** (`system/`): config and scripts owned by the image under `/usr`, read-only on the
@@ -181,10 +185,9 @@ Three layers, same split Omarchy uses:
 
 ## Attribution
 
-The desktop look, keybindings, theme set, and helper-script model are ported from
-[Omarchy](https://github.com/basecamp/omarchy) by DHH, MIT licensed (see `LICENSE.omarchy`). This
-project replaces Omarchy's Arch/pacman base with a Fedora bootc image; the config and script layer is
-adapted from Omarchy's source, not copied verbatim.
+Parts of the helper scripts, theme engine, default configs and boot-splash script are adapted from
+third-party MIT-licensed work; the copyright and permission notice is in `LICENSE-THIRD-PARTY`, and
+each adapted file says so in its header. Everything else is under `LICENSE`.
 
 ## Framework 12 notes
 

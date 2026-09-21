@@ -4,7 +4,7 @@
 Reuses tools/gen-plymouth-logo.py's glyph recovery/derivation/composition code (same
 source ~/.local/share/omarchy/default/plymouth/logo.png, same H Y P E D O R A cell
 grid) instead of duplicating it, then renders the boolean cell grid as two grid rows
-per text line the way Omarchy's own logo.txt is drawn:
+per text line the way the upstream logo.txt is drawn:
   both rows set    -> "█"
   top row only     -> "▀"
   bottom row only  -> "▄"

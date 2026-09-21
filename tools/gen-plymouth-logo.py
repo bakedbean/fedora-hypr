@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Generate the HYPEDORA Plymouth wordmark in the pixel style of Omarchy's logo.
+"""Generate the HYPEDORA Plymouth wordmark in the pixel style of the upstream logo.
 
-Reads Omarchy's ``logo.png`` (800x188, blocky wordmark "OMARCHY" on transparent),
+Reads the upstream ``logo.png`` (800x188, blocky wordmark "OMARCHY" on transparent),
 recovers its cell grid, cuts the seven glyphs, derives P/E/D from R/C/O and
 composes H Y P E D O R A with the original letter spacing, colour and rendering.
 

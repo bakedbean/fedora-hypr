@@ -17,12 +17,13 @@ done
 for s in /usr/bin/fh-*; do
   bash -n "$s" && shellcheck -S error "$s" && echo "PASS lint $(basename "$s")" || { echo "FAIL lint $s"; fail=1; }
 done
-# 3. no omarchy leftovers outside attribution comments
-if grep -il 'omarchy' /usr/bin/fh-* | xargs -r grep -Li 'Adapted from Omarchy' | grep -q .; then
+# 3. no omarchy leftovers at all; adapted scripts point at the third-party notice
+if grep -qi 'omarchy' /usr/bin/fh-*; then
   echo "FAIL omarchy references remain"; fail=1
-elif grep -hi 'omarchy' /usr/bin/fh-* | grep -vi 'Adapted from Omarchy' | grep -q .; then
-  echo "FAIL omarchy references remain (non-attribution lines)"; fail=1
 else echo "PASS no omarchy leftovers"; fi
+if grep -l 'MIT-licensed' /usr/bin/fh-* | xargs -r grep -L '^# Adapted from third-party MIT-licensed code; see LICENSE-THIRD-PARTY' | grep -q .; then
+  echo "FAIL attribution line malformed"; fail=1
+else echo "PASS attribution lines"; fi
 # 4. behaviour that runs headless
 export HOME; HOME=$(mktemp -d)
 fh-toggle-enabled waybar-off && { echo "FAIL toggle default should be off"; fail=1; } || echo "PASS toggle default off"
