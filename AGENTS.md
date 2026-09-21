@@ -142,9 +142,18 @@ A failed CI build is safe: the machine keeps its last good image.
   and theme names are whitelisted (`^[a-z0-9-]+$`) — keep both.
 - The Containerfile copies `system/` **after** the package layer on purpose; don't move it.
 - Removing a package an existing account depends on is a *migration*: dropping `fish` left the installed
-  user with a login shell that no longer existed, so every terminal exited instantly (fix: boot the previous deployment from GRUB and `sudo usermod -s /usr/bin/zsh eben` — `chsh` was missing from base-main — a lost hardlink, restored in 10-packages.sh).
-  When you remove something users may reference from `~`/`/etc/passwd`, add a note to README and a
-  fallback in the image where cheap.
+  user with a login shell that no longer existed, so every terminal AND every `login` bounced. Recovery
+  needs to be done from outside; see below. When removing something users may reference from
+  `~`/`/etc/passwd`, add a README note and a fallback in the image where cheap.
+- **Each bootc deployment has its own `/etc`.** `usermod`/`chsh` in deployment B does nothing for
+  deployment A. To fix an unbootable-login state, mount the disk on another machine and edit
+  `ostree/deploy/default/deploy/*/etc/passwd` in **every** deployment (a shell present in each, e.g. `/bin/bash`).
+- **Editing a bootc disk's `/etc` from a non-SELinux host strips the SELinux label** (`sed -i` writes a new
+  file); Fedora's login stack then refuses `/etc/passwd`. After editing, restore it:
+  `setfattr -n security.selinux -v 'system_u:object_r:passwd_file_t:s0' .../etc/passwd` (check a sibling
+  file with `getfattr -n security.selinux` for the right value). Prefer in-place edits from a running
+  deployment whenever one still logs in.
+- `chsh` is missing from base-main (lost hardlink of `chfn`); `10-packages.sh` restores it.
 
 ## Reference material on the host (read-only)
 
