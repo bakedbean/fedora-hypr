@@ -14,6 +14,10 @@ dnf -y install --setopt=install_weak_deps=False \
 
 dnf clean all
 
+# base-main loses the chsh half of the chfn/chsh hardlink pair when its layers are flattened
+# (rpm -V util-linux reports 'missing /usr/bin/chsh'); restore the RPM's own link.
+[[ -e /usr/bin/chsh ]] || ln /usr/bin/chfn /usr/bin/chsh
+
 # Drop build-time-only content so `bootc container lint` has nothing to warn about.
 # These are transient dnf/systemd-tmpfiles/scriptlet artifacts of this RUN step, not
 # content the image needs to ship: /run and /tmp are always ephemeral, and none of

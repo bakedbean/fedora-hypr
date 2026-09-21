@@ -36,7 +36,6 @@ xdg-user-dirs
 # terminal + cli
 alacritty
 zsh
-util-linux-user
 tmux
 neovim
 btop
