@@ -46,6 +46,9 @@ mkdir -p "$src/.ssh" "$src/.config/gh" "$src/.oh-my-zsh/custom" "$src/.config/tm
 chmod 700 "$src/.ssh"; echo fake-key > "$src/.ssh/id_ed25519"; chmod 600 "$src/.ssh/id_ed25519"
 echo 'x' > "$src/.config/gh/hosts.yml"; echo 'x' > "$src/.oh-my-zsh/oh-my-zsh.sh"
 echo 'x' > "$src/.config/starship.toml"; echo x > "$src/.config/tmux/tmux.conf"; echo x > "$src/.config/radiobar/stations.json"
+printf 'color_theme = "current"\n' > "$src/.config/btop/btop.conf"
+mkdir -p "$src/.config/btop/themes"; ln -s "$src/.config/omarchy/current/theme/btop.theme" "$src/.config/btop/themes/current.theme"
+chmod 700 "$home"
 echo 'x' > "$src/dotfiles/astronvim/init.lua"; ln -s "$src/dotfiles/astronvim" "$src/.config/nvim"
 echo 'x' > "$src/RadioBar/linux/radiobar"; chmod +x "$src/RadioBar/linux/radiobar"
 echo 'x' > "$src/RadioBar/build/junk"; echo 'x' > "$src/RadioBar/tools/__pycache__/junk.pyc"
@@ -57,7 +60,7 @@ cat > "$src/.local/share/applications/Discord.desktop" <<EOF
 [Desktop Entry]
 Name=Discord
 Exec=omarchy-launch-webapp https://discord.com/channels/@me
-Icon=$src/.local/share/applications/icons/Discord.png
+Icon=/home/eben/.local/share/applications/icons/Discord.png
 EOF
 printf '[Desktop Entry]\nName=Cliamp\nExec=cliamp\n' > "$src/.local/share/applications/Cliamp.desktop"
 printf '[Desktop Entry]\nName=Claudette\nExec=claudette-app\n' > "$src/.local/share/applications/Claudette.desktop"
@@ -82,6 +85,10 @@ cat > "$src/.config/waybar/config.jsonc" <<EOF
   "custom/docker": {
     "exec": "~/.cargo/bin/waybar-docker",
     "return-type": "json"
+  },
+  "clock": {
+    "format": "{:%H:%M,}",
+    "tooltip": false
   },
   "custom/radio": {
     "exec": "RADIOBAR_SCROLL_WINDOW=25 radiobar status",
@@ -163,6 +170,7 @@ check grep -q '^# CCI configuration' "$home/.zshrc.local"
 check grep -q '^export FAKE_API_KEY=' "$home/.zshrc.local"
 check grep -q '^export PROD_READ_ONLY_DSN=' "$home/.zshrc.local"
 check test "$(stat -c %a "$home/.zshrc.local")" = 600
+check test "$(stat -c %a "$home")" = 700                    # the home dir's own mode survives the staged rsync
 check bash -c "! grep -qF '$src' '$home/.zshrc'"          # source home path rewritten to \$HOME
 check grep -qF 'export ZSH="$HOME/.oh-my-zsh"' "$home/.zshrc"
 check grep -qF '"$HOME/Downloads/google-cloud-sdk/path.zsh.inc"' "$home/.zshrc"   # single quotes would not expand
@@ -179,6 +187,13 @@ check test -f "$home/.config/gh/hosts.yml"
 check test -f "$home/.oh-my-zsh/oh-my-zsh.sh"
 check test -f "$home/.config/starship.toml"
 check test -f "$home/.config/tmux/tmux.conf"
+check grep -qx 'color_theme = "current"' "$home/.config/btop/btop.conf"
+check test -L "$home/.config/btop/themes/current.theme"
+check test "$(readlink "$home/.config/btop/themes/current.theme")" = ../../fedora-hypr/current/theme/btop.theme
+check test -d "$home/.local/bin"
+check grep -qx '  .local/bin' "$out"          # created parent dirs are listed (and chowned/labelled when root)
+check grep -qx '  .local' "$out"
+check grep -qx '  .config' "$out"
 check test -f "$home/.config/radiobar/stations.json"
 check test -f "$home/dotfiles/astronvim/init.lua"
 check test -L "$home/.config/nvim"
@@ -201,6 +216,7 @@ check bash -c "! test -e '$home/.config/hypr/hyprland.conf'"     # skel's stays
 check test -f "$home/.local/share/applications/Discord.desktop"
 check grep -q '^Exec=fh-launch-webapp ' "$home/.local/share/applications/Discord.desktop"
 check bash -c "! grep -q omarchy '$home/.local/share/applications/Discord.desktop'"
+check grep -qxF 'Icon=/home/eben/.local/share/applications/icons/Discord.png' "$home/.local/share/applications/Discord.desktop"
 check bash -c "! test -e '$home/.local/share/applications/Cliamp.desktop'"
 check bash -c "! test -e '$home/.local/share/applications/Claudette.desktop'"
 check test -f "$home/.local/share/applications/hidden.desktop"
@@ -216,6 +232,10 @@ check bash -c "! grep -q 'custom/update' '$wb/config.jsonc'"
 check bash -c "sed 's|//.*||' '$wb/config.jsonc' | jq -e '.\"modules-center\" == [\"clock\", \"custom/idle-indicator\"]'"
 check bash -c "sed 's|//.*||' '$wb/config.jsonc' | jq -e '.\"modules-left\"[0] == \"custom/menu\"'"
 check bash -c "sed 's|//.*||' '$wb/config.jsonc' | jq -e '.\"custom/menu\".\"on-click\" == \"fh-menu\"'"
+menu_glyph=$(sed 's|//.*||' "$here/../system/usr/share/fedora-hypr/default/waybar/config.jsonc" | jq -r '."custom/menu".format')
+check test -n "$menu_glyph"
+check bash -c "sed 's|//.*||' '$wb/config.jsonc' | jq -e --arg g '$menu_glyph' '.\"custom/menu\".format == \$g'"
+check bash -c "sed 's|//.*||' '$wb/config.jsonc' | jq -e '.clock.format == \"{:%H:%M,}\"'"   # ",}" inside a string untouched
 check bash -c "sed 's|//.*||' '$wb/config.jsonc' | jq -e '.\"custom/docker\".exec == \"waybar-docker\"'"
 check bash -c "sed 's|//.*||' '$wb/config.jsonc' | jq -e '.\"custom/idle-indicator\".exec == \"/usr/share/fedora-hypr/default/waybar/indicators/idle.sh\"'"
 check bash -c "sed 's|//.*||' '$wb/config.jsonc' | jq -e '.cpu.\"on-click\" == \"fh-launch-or-focus-tui btop\"'"
@@ -254,5 +274,30 @@ check grep -q 'restorecon' "$out"
 
 # missing target home aborts
 check bash -c "! (SUDO_USER=fakeuser HOME=$src bash '$script' --dest '$tmp/nohome')"
+
+# --- refusals: a .zshrc whose secrets block cannot be split must not be written at all ----------
+declare -A ZRC=(
+  [nostart]=$'# x\n## CCI configuration\nexport FAKE_API_KEY=k\nexport PROD_READ_ONLY_DSN=d'
+  [noend]=$'# x\n# CCI configuration\nexport FAKE_API_KEY=k\nexport OTHER=1'
+  [leaked]=$'# x\nexport LEAKED_TOKEN=k\n# CCI configuration\nexport A=1\nexport PROD_READ_ONLY_DSN=d'
+  [nosplit-secret]=$'# x\nexport SOME_API_KEY=k'
+)
+refuse_case() {  # <name> [extra args]; asserts rc!=0 and target untouched
+  local name=$1; shift
+  local s=$tmp/src-$name d=$tmp/disk-$name
+  mkdir -p "$s/.config/hypr" "$d/var/home/eben"
+  printf '%s\n' "${ZRC[$name]}" > "$s/.zshrc"; echo x > "$s/.zprofile"
+  local snap; snap=$(find "$d" | sort)
+  if env SUDO_USER=fakeuser HOME="$s" bash "$script" --dest "$d" "$@" >/dev/null 2>&1; then return 1; fi
+  [[ $snap == "$(find "$d" | sort)" ]]
+}
+check refuse_case nostart
+check refuse_case noend
+check refuse_case leaked
+check refuse_case nosplit-secret --no-split
+# --no-split with a clean .zshrc (no markers, no secrets) is accepted
+ns=$tmp/src-ok; nd=$tmp/disk-ok; mkdir -p "$ns" "$nd/var/home/eben"; printf '# plain\nalias l=ls\n' > "$ns/.zshrc"
+check env SUDO_USER=fakeuser HOME="$ns" bash "$script" --dest "$nd" --no-split
+check grep -qx 'alias l=ls' "$nd/var/home/eben/.zshrc"
 
 exit $fail

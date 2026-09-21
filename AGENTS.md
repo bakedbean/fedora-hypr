@@ -41,7 +41,7 @@ tests/check.sh             in-image self-check (~130 checks); runs theme_test.sh
 tests/migrate_test.sh      HOST-side test of tools/migrate-home.sh on a fabricated home (make test-migrate)
 tools/migrate-home.sh      copies the author's Omarchy home onto a target drive (see "Migrating a home from Omarchy")
 vm.sh / make vm            QEMU smoke test (see Debugging)
-.github/workflows/build.yml  build → check → push :44 and :44-YYYYMMDD on push to main + daily
+.github/workflows/build.yml  test-migrate (host) → build → check → push :44 and :44-YYYYMMDD on push to main + daily
 ```
 
 Three layers, keep them separate:

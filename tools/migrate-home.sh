@@ -4,6 +4,13 @@
 # Run on the Omarchy machine, as the user, with the target drive attached:
 #   sudo tools/migrate-home.sh /dev/sda3 [--dry-run]
 #   tools/migrate-home.sh --dest /mnt/target [--dry-run]     # already-mounted disk (or a test tree)
+# Options:
+#   --dest DIR    mount root of an already-mounted target disk (instead of a block device)
+#   --src DIR     source home (default: $SUDO_USER's home, else $HOME)
+#   --user NAME   target user whose home under var/home/ is written (default: eben)
+#   --no-split    do not look for the "# CCI configuration" .. PROD_READ_ONLY_DSN block in .zshrc
+#                 (only for a .zshrc without it; the secret-pattern guard still refuses obvious secrets)
+#   --dry-run     mount read-only, rsync -n, write nothing
 #
 # Copies a curated set of dotfiles from the invoking user's home ($SUDO_USER) into
 # <disk>/var/home/<user> (bootc keeps it under ostree/deploy/default/var when the raw
@@ -13,17 +20,27 @@
 # Files written from a non-SELinux host carry no label, so as root the copied paths get
 # security.selinux xattrs set explicitly; run `restorecon -Rv ~` on the Fedora side too.
 # Nothing here is ever printed except paths and summaries — never file contents.
+#
+# Known limitations (documented, not fixed):
+#   - rewrites are literal seds on the copied files; the jq validation strips "//..." which would also
+#     eat a URL inside a JSON string (none in the author's config today)
+#   - the image-binary allowlist in in_image() is hand-maintained; an unlisted binary drops a .desktop
+#     file (always reported, never silent)
+#   - the target uid/gid is fixed at 1000:1000 (the first user fh-first-boot-user creates)
+#   - files copied by an earlier run that a later run would drop (changed drop rules) are not removed
+#   - source-home literals (/home/<user>) are replaced textually; a longer path sharing the prefix would match
 set -euo pipefail
 
 usage() { sed -n '2,/^$/p' "$0" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
 
-DEV= DEST= SRC= DRY=0 TARGET_USER=eben
+DEV= DEST= SRC= DRY=0 NOSPLIT=0 TARGET_USER=eben
 while [[ $# -gt 0 ]]; do
   case $1 in
     --dest) DEST=$2; shift 2 ;;
     --src) SRC=$2; shift 2 ;;
     --user) TARGET_USER=$2; shift 2 ;;
     --dry-run) DRY=1; shift ;;
+    --no-split) NOSPLIT=1; shift ;;
     -h|--help) usage ;;
     -*) echo "unknown option: $1" >&2; usage 1 ;;
     *) [[ -z $DEV ]] || { echo "unexpected argument: $1" >&2; usage 1; }; DEV=$1; shift ;;
@@ -52,16 +69,19 @@ need rsync; need jq; need awk; need perl
 # --- mount -------------------------------------------------------------------------
 MNT= MOUNTED=0
 cleanup() {
-  if (( MOUNTED )); then umount "$MNT" && echo "unmounted $MNT"; fi
+  if (( MOUNTED )); then
+    if umount "$MNT"; then echo "unmounted $MNT"; MOUNTED=0
+    else echo "WARNING: could not unmount $MNT; unmount it yourself before unplugging" >&2; fi
+  fi
   [[ -n ${WORK:-} ]] && rm -rf "$WORK"
-  [[ -n $MNT && -d $MNT && $MOUNTED -eq 1 ]] && rmdir "$MNT" 2>/dev/null
+  if [[ -n ${TMPMNT:-} && -d $TMPMNT && $MOUNTED -eq 0 ]]; then rmdir "$TMPMNT" 2>/dev/null || true; fi
   return 0
 }
 trap cleanup EXIT
 if [[ -n $DEV ]]; then
   (( IS_ROOT )) || { echo "mounting $DEV needs root (sudo)" >&2; exit 1; }
   [[ -b $DEV ]] || { echo "$DEV is not a block device" >&2; exit 1; }
-  MNT=$(mktemp -d /tmp/migrate-home.XXXXXX)
+  TMPMNT=$(mktemp -d /tmp/migrate-home.XXXXXX); MNT=$TMPMNT
   if (( DRY )); then mount -o ro "$DEV" "$MNT"; else mount "$DEV" "$MNT"; fi; MOUNTED=1
   echo "mounted $DEV on $MNT"
 else
@@ -82,6 +102,11 @@ echo "source: $SRC"
 echo "target: $TARGET"
 (( DRY )) && echo "DRY RUN: nothing will be written"
 
+# directories under the target before we write anything: whatever exists afterwards and is not
+# in this list was created by this run and needs ownership + label too (I-2)
+PRE_DIRS=$(find "$TARGET" -mindepth 1 -maxdepth 4 -type d 2>/dev/null | sort || true)
+TARGET_MODE=$(stat -c %a "$TARGET")
+
 WORK=$(mktemp -d)   # staging tree for everything that is rewritten before copying
 STAGE=$WORK/stage
 mkdir -p "$STAGE"
@@ -93,6 +118,7 @@ SKIPPED=()     # source paths that did not exist
 DROPPED=()     # .desktop files not copied, with reason
 REWRITES=()    # human-readable rewrites applied
 UNKNOWN_CMDS=() # on-click/exec targets we could not vouch for (kept)
+CREATED_DIRS=() # parent dirs this run created under the target (chown + label, non-recursive)
 
 RSYNC=(rsync -a --no-owner --no-group --mkpath)
 (( DRY )) && RSYNC+=(--dry-run)
@@ -107,40 +133,6 @@ copy() {
   TOUCHED+=("$rel")
   echo "copied  $rel"
 }
-
-# --- 1. plain copies ---------------------------------------------------------------
-copy .zprofile
-copy .gitconfig
-copy .ssh
-copy .config/gh
-copy .oh-my-zsh
-for p in .config/starship.toml .config/tmux .config/btop .config/lazygit .config/git \
-         .config/fastfetch .config/radiobar .local/share/fonts dotfiles; do
-  copy "$p"
-done
-copy RadioBar --exclude=/build --exclude=__pycache__
-# ~/.config/nvim is a symlink into ~/dotfiles: copied as a symlink (rsync -a); make sure it resolves
-if [[ -L $SRC/.config/nvim ]]; then
-  copy .config/nvim
-  link=$(readlink "$SRC/.config/nvim"); resolved=$link
-  for lit in "${SRC_HOME_LITERALS[@]}"; do resolved=${resolved/#"$lit"/$TARGET}; done
-  if (( ! DRY )) && [[ ! -e $resolved ]]; then
-    echo "WARNING: .config/nvim -> $link does not resolve on the target ($resolved missing)" >&2
-  fi
-elif [[ -d $SRC/.config/nvim ]]; then
-  copy .config/nvim
-fi
-
-# ~/.local/bin/radiobar: recreate as an absolute symlink. /home -> var/home on Fedora, so the
-# same /home/<user> path resolves there.
-if [[ -e $SRC/RadioBar/linux/radiobar ]]; then
-  if (( ! DRY )); then
-    mkdir -p "$TARGET/.local/bin"
-    ln -sfn "/home/$TARGET_USER/RadioBar/linux/radiobar" "$TARGET/.local/bin/radiobar"
-  fi
-  TOUCHED+=(.local/bin/radiobar)
-  echo "linked  .local/bin/radiobar -> /home/$TARGET_USER/RadioBar/linux/radiobar"
-fi
 
 # --- helpers for the rewritten copies ----------------------------------------------
 # rewrite_home_paths FILE: literal source-home paths -> $HOME (and re-quote '...' so it expands)
@@ -175,13 +167,13 @@ in_image() {
   [[ " $IMAGE_BINS " == *" $name "* ]]
 }
 
-# --- 2. .zshrc split ----------------------------------------------------------------
+# --- 1. .zshrc split ----------------------------------------------------------------
 if [[ -f $SRC/.zshrc ]]; then
   z=$STAGE/.zshrc; zl=$STAGE/.zshrc.local
-  awk -v local="$zl" '
+  awk -v local="$zl" -v nosplit="$NOSPLIT" '
     # secrets block: from "# CCI configuration" through the PROD_READ_ONLY_DSN export
-    /^# CCI configuration/ { inblock=1; print "[[ -f ~/.zshrc.local ]] && source ~/.zshrc.local"; }
-    inblock { print > local; if ($0 ~ /^export PROD_READ_ONLY_DSN/) inblock=0; next }
+    !nosplit && /^# CCI configuration/ { inblock=1; found=1; print "[[ -f ~/.zshrc.local ]] && source ~/.zshrc.local"; }
+    inblock { print > local; if ($0 ~ /^export PROD_READ_ONLY_DSN/) { inblock=0; closed=1 }; next }
     # fzf block: Omarchy sources /usr/share/fzf/*.zsh; Fedora ships /usr/share/fzf/shell/*.zsh
     /^if command -v fzf/ {
       print "if command -v fzf &> /dev/null; then"
@@ -199,14 +191,28 @@ if [[ -f $SRC/.zshrc ]]; then
     }
     infzf { if ($0 ~ /^fi$/) infzf=0; next }
     { print }
-  ' "$SRC/.zshrc" > "$z"
+    # exit 2: start marker never seen (unless --no-split); exit 3: end marker never seen
+    END { if (!nosplit && !found) exit 2; if (inblock && !closed) exit 3 }
+  ' "$SRC/.zshrc" > "$z" || {
+    case $? in
+      2) echo "refusing: no '# CCI configuration' start marker in .zshrc (secrets would be copied in the clear)." >&2
+         echo "  Pass --no-split only if this .zshrc really has no secrets block." >&2 ;;
+      3) echo "refusing: '# CCI configuration' block in .zshrc never ends with 'export PROD_READ_ONLY_DSN'" >&2 ;;
+      *) echo "refusing: could not rewrite .zshrc" >&2 ;;
+    esac
+    exit 1
+  }
   rewrite_home_paths "$z"
   if [[ -s $zl ]]; then
     chmod 600 "$zl"
     REWRITES+=(".zshrc: secrets block (# CCI configuration .. PROD_READ_ONLY_DSN) moved to .zshrc.local")
   else
     rm -f "$zl"
-    echo "WARNING: no '# CCI configuration' block found in .zshrc; nothing split out" >&2
+  fi
+  # independent guard: nothing that looks like a secret assignment may remain in the world-readable copy
+  if grep -Eq '(API_KEY|_TOKEN|SECRET|PASSWORD|_PASS|DSN)=' "$z"; then
+    echo "refusing: rewritten .zshrc still contains a secret-looking assignment (API_KEY/_TOKEN/SECRET/PASSWORD/_PASS/DSN)" >&2
+    exit 1
   fi
   if grep -q 'command -v fzf' "$SRC/.zshrc"; then
     REWRITES+=(".zshrc: fzf block sources /usr/share/fzf/shell/*.zsh (Fedora) with fallback")
@@ -221,7 +227,7 @@ else
   SKIPPED+=(.zshrc)
 fi
 
-# --- 3. desktop entries --------------------------------------------------------------
+# --- 2. desktop entries --------------------------------------------------------------
 apps=.local/share/applications
 if [[ -d $SRC/$apps ]]; then
   mkdir -p "$STAGE/$apps"
@@ -235,15 +241,14 @@ if [[ -d $SRC/$apps ]]; then
       DROPPED+=("$name (Exec: ${exe%% *})")
       continue
     fi
-    sed 's/omarchy-/fh-/g' "$f" > "$STAGE/$apps/$name"
-    rewrite_home_paths "$STAGE/$apps/$name"
+    sed 's/omarchy-/fh-/g' "$f" > "$STAGE/$apps/$name"   # Icon=/home/<user>/... stays: /home resolves on Fedora
     TOUCHED+=("$apps/$name")
   done
   shopt -u nullglob
   REWRITES+=("$apps/*.desktop: omarchy- -> fh-; entries whose Exec is not in the image dropped")
 fi
 
-# --- 4. waybar -----------------------------------------------------------------------
+# --- 3. waybar -----------------------------------------------------------------------
 wb=.config/waybar
 if [[ -d $SRC/$wb ]]; then
   mkdir -p "$STAGE/$wb"
@@ -269,17 +274,21 @@ if [[ -d $SRC/$wb ]]; then
     }
     drop_module custom/voxtype
     if ! in_image fh-update-available; then drop_module custom/update; fi
+    # the menu button's glyph comes from the image's default config (the omarchy icon font is not shipped)
+    menu_glyph=$(sed 's|//.*||' "$REPO/system/usr/share/fedora-hypr/default/waybar/config.jsonc" | jq -r '."custom/menu".format')
+    [[ -n $menu_glyph && $menu_glyph != null ]] || { echo "refusing: no custom/menu format in the image default waybar config" >&2; exit 1; }
     sed -i \
       -e 's|omarchy-|fh-|g' \
       -e 's|\$OMARCHY_PATH/default/waybar/indicators/|/usr/share/fedora-hypr/default/waybar/indicators/|g' \
       -e 's|~/\.cargo/bin/waybar-docker|waybar-docker|g' \
       -e 's|"custom/omarchy"|"custom/menu"|g' \
-      -e "s|<span font='omarchy'>[^<]*</span>||g" \
+      -e "s|<span font='omarchy'>[^<]*</span>|$menu_glyph|g" \
       -e 's|Omarchy Menu|fedora-hypr Menu|g' \
       "$cfg"
     rewrite_home_paths "$cfg"
-    # waybar tolerates trailing commas before } / ], jq does not; normalise so the result validates
-    perl -0pi -e 's/,(\s*(?:\/\/[^\n]*\n\s*)*[\]}])/$1/g' "$cfg"
+    # waybar tolerates a trailing comma before a } / ] on a following line, jq does not; normalise so the
+    # result validates. Newline-anchored on purpose: ",}" inside a string on one line is left alone.
+    perl -0pi -e 's/,([ \t]*\n(?:\s*\/\/[^\n]*\n)*\s*[\]}])/$1/g' "$cfg"
     REWRITES+=("$wb/config.jsonc: omarchy- -> fh-; \$OMARCHY_PATH indicators -> /usr/share/fedora-hypr; ~/.cargo/bin/waybar-docker -> waybar-docker; custom/omarchy -> custom/menu")
     if ! sed 's|//.*||' "$cfg" | jq . >/dev/null 2>&1; then
       echo "refusing: rewritten $wb/config.jsonc does not parse (sed 's|//.*||' | jq .)" >&2; exit 1
@@ -305,7 +314,7 @@ if [[ -d $SRC/$wb ]]; then
   fi
 fi
 
-# --- 5. hypr overrides ----------------------------------------------------------------
+# --- 4. hypr overrides ----------------------------------------------------------------
 hy=.config/hypr
 if [[ -d $SRC/$hy ]]; then
   mkdir -p "$STAGE/$hy"
@@ -329,22 +338,86 @@ if [[ -d $SRC/$hy ]]; then
   REWRITES+=("$hy/*.conf: omarchy- -> fh-; cliamp/claudette/'omarchy menu' lines dropped; signal/obsidian/typora/1password -> flatpak run")
 fi
 
+# --- 5. plain copies (after every rewrite has succeeded: a refusal above must leave the target untouched)
+copy .zprofile
+copy .gitconfig
+copy .ssh
+copy .config/gh
+copy .oh-my-zsh
+for p in .config/starship.toml .config/tmux .config/lazygit .config/git \
+         .config/fastfetch .config/radiobar .local/share/fonts dotfiles; do
+  copy "$p"
+done
+# btop: btop.conf as-is (color_theme = "current"); themes/current.theme becomes a relative symlink to the
+# image's rendered theme (Omarchy's points into ~/.config/omarchy). Written via the stage below.
+if [[ -d $SRC/.config/btop ]]; then
+  copy .config/btop --exclude=/themes/current.theme
+  mkdir -p "$STAGE/.config/btop/themes"
+  ln -sfn ../../fedora-hypr/current/theme/btop.theme "$STAGE/.config/btop/themes/current.theme"
+  TOUCHED+=(.config/btop/themes/current.theme)
+  REWRITES+=(".config/btop/themes/current.theme -> ../../fedora-hypr/current/theme/btop.theme")
+fi
+copy RadioBar --exclude=/build --exclude=__pycache__
+# ~/.config/nvim is a symlink into ~/dotfiles: copied as a symlink (rsync -a); make sure it resolves
+if [[ -L $SRC/.config/nvim ]]; then
+  copy .config/nvim
+  link=$(readlink "$SRC/.config/nvim"); resolved=$link
+  for lit in "${SRC_HOME_LITERALS[@]}"; do resolved=${resolved/#"$lit"/$TARGET}; done
+  if (( ! DRY )) && [[ ! -e $resolved ]]; then
+    echo "WARNING: .config/nvim -> $link does not resolve on the target ($resolved missing)" >&2
+  fi
+elif [[ -d $SRC/.config/nvim ]]; then
+  copy .config/nvim
+fi
+
+# ~/.local/bin/radiobar: recreate as an absolute symlink. /home -> var/home on Fedora, so the
+# same /home/<user> path resolves there.
+if [[ -e $SRC/RadioBar/linux/radiobar ]]; then
+  if (( ! DRY )); then
+    mkdir -p "$TARGET/.local/bin"
+    ln -sfn "/home/$TARGET_USER/RadioBar/linux/radiobar" "$TARGET/.local/bin/radiobar"
+  fi
+  TOUCHED+=(.local/bin/radiobar)
+  echo "linked  .local/bin/radiobar -> /home/$TARGET_USER/RadioBar/linux/radiobar"
+fi
+
 # --- 6. write the staged tree ---------------------------------------------------------
-(( DRY )) || mkdir -p "$TARGET"
+# rsync of "stage/" -> "target/" would also apply the stage root's mode/mtime to the home dir itself:
+# mirror the home's attributes onto the stage root first, and restore the mode afterwards regardless
+chmod "$TARGET_MODE" "$STAGE"; touch -r "$TARGET" "$STAGE"
 "${RSYNC[@]}" -- "$STAGE/" "$TARGET/"
-echo "staged  $(cd "$STAGE" && find . -type f | wc -l) rewritten files -> $TARGET"
+(( DRY )) || chmod "$TARGET_MODE" "$TARGET"
+echo "staged  $(cd "$STAGE" && find . -type f -o -type l | wc -l) rewritten files -> $TARGET"
+
+# parent directories created by this run (I-2): not inside any copied path, so they need their own chown/label
+if (( ! DRY )); then
+  while IFS= read -r d; do
+    [[ -n $d ]] || continue
+    rel=${d#"$TARGET"/}
+    inside=0
+    for t in "${TOUCHED[@]}"; do [[ $rel == "$t" || $rel == "$t"/* ]] && { inside=1; break; }; done
+    (( inside )) || CREATED_DIRS+=("$rel")
+  done < <(comm -13 <(printf '%s\n' "$PRE_DIRS") <(find "$TARGET" -mindepth 1 -maxdepth 4 -type d | sort))
+fi
 
 # --- 7. ownership + SELinux labels ---------------------------------------------------
+label_for() { if [[ $1 == .ssh* ]]; then echo unconfined_u:object_r:ssh_home_t:s0; else echo unconfined_u:object_r:user_home_t:s0; fi; }
+LABEL_FAILED=0
 if (( IS_ROOT && ! DRY )); then
   for rel in "${TOUCHED[@]}"; do
     p=$TARGET/$rel
     [[ -e $p || -L $p ]] || continue
     chown -h -R "$UID_GID" "$p"
-    label=unconfined_u:object_r:user_home_t:s0
-    [[ $rel == .ssh* ]] && label=unconfined_u:object_r:ssh_home_t:s0
-    find "$p" -exec setfattr -h -n security.selinux -v "$label" {} +
+    find "$p" -exec setfattr -h -n security.selinux -v "$(label_for "$rel")" {} + \
+      || { echo "WARNING: setfattr failed under $p (restorecon on the Fedora side will fix it)" >&2; LABEL_FAILED=1; }
   done
-  echo "chowned $UID_GID and labelled ${#TOUCHED[@]} paths"
+  for rel in "${CREATED_DIRS[@]}"; do
+    p=$TARGET/$rel
+    chown -h "$UID_GID" "$p"
+    setfattr -h -n security.selinux -v "$(label_for "$rel")" "$p" \
+      || { echo "WARNING: setfattr failed on $p (restorecon on the Fedora side will fix it)" >&2; LABEL_FAILED=1; }
+  done
+  echo "chowned $UID_GID and labelled ${#TOUCHED[@]} paths + ${#CREATED_DIRS[@]} created parent dirs"
 elif (( ! DRY )); then
   echo "not root: skipped chown/setfattr (run restorecon on the Fedora side)"
 fi
@@ -353,6 +426,7 @@ fi
 # --- summary --------------------------------------------------------------------------
 echo
 echo "== copied (${#TOUCHED[@]})"; printf '  %s\n' "${TOUCHED[@]}"
+if (( ${#CREATED_DIRS[@]} )); then echo "== parent dirs created (${#CREATED_DIRS[@]})"; printf '  %s\n' "${CREATED_DIRS[@]}"; fi
 if (( ${#SKIPPED[@]} )); then echo "== not present in source, skipped"; printf '  %s\n' "${SKIPPED[@]}"; fi
 if (( ${#DROPPED[@]} )); then echo "== dropped .desktop files (binary not in the image)"; printf '  %s\n' "${DROPPED[@]}"; fi
 if (( ${#UNKNOWN_CMDS[@]} )); then echo "== commands not known to be in the image (kept, check them)"; printf '  %s\n' "${UNKNOWN_CMDS[@]}"; fi
@@ -360,7 +434,7 @@ echo "== rewrites"; printf '  %s\n' "${REWRITES[@]}"
 cat <<EOF
 == next steps
   1. boot the drive and log in as $TARGET_USER
-  2. sudo restorecon -Rv ~        (belt and braces for the SELinux labels set here)
+  2. sudo restorecon -Rv ~        (belt and braces for the SELinux labels set here$( (( LABEL_FAILED )) && echo "; REQUIRED: some labels failed"))
   3. open nvim once to let AstroNvim install its plugins
   4. fh-update if the image changed since the drive was installed
 EOF
