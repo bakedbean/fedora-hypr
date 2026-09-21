@@ -96,6 +96,12 @@ cat > "$src/.config/waybar/config.jsonc" <<EOF
 {
   "include": ["$src/.config/waybar/wsx.jsonc"],
   "modules-left": ["custom/omarchy", "hyprland/workspaces#main"],
+  "hyprland/workspaces#main": {
+    "window-rewrite": {
+      "class<firefox>": "F",
+      "class<Alacritty>": "A"
+    }
+  },
   "modules-center": ["clock", "custom/update", "custom/voxtype", "custom/idle-indicator"],
   "modules-right": ["custom/wsx", "custom/docker"],
   "custom/omarchy": {
@@ -293,6 +299,8 @@ check grep -q 'some-missing-binary' "$out"        # unknown on-click reported, b
 check bash -c "! grep -q RADIOBAR_SCROLL_WINDOW '$out'"   # env-prefixed commands are resolved past the assignment
 check bash -c "! grep -q 'config.jsonc: radiobar' '$out'"
 check grep -q 'some-missing-binary' "$wb/config.jsonc"
+check bash -c "sed 's|//.*||' '$wb/config.jsonc' | jq -e '.\"hyprland/workspaces#main\".\"window-rewrite\" | .\"class<firefox>\" == \"F\" and .\"class<org.mozilla.firefox>\" == \"F\"'"
+check test "$(grep -c 'class<org.mozilla.firefox>' "$wb/config.jsonc")" = 1
 check test -f "$wb/wsx.jsonc"
 check test -f "$wb/wsx.css"
 check test -x "$wb/scripts/get_weather.sh"
@@ -318,6 +326,7 @@ check grep -q 'gaps_in = 5' "$hy/looknfeel.conf"
 before=$(cd "$home" && find . | sort | md5sum)
 check run
 check test "$before" = "$(cd "$home" && find . | sort | md5sum)"
+check test "$(grep -c 'class<org.mozilla.firefox>' "$wb/config.jsonc")" = 1     # not duplicated on re-run
 check grep -q 'restorecon' "$out"
 
 # missing target home aborts

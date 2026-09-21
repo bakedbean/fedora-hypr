@@ -294,6 +294,19 @@ if [[ -d $SRC/$wb ]]; then
       -e 's|Omarchy Menu|fedora-hypr Menu|g' \
       "$cfg"
     rewrite_home_paths "$cfg"
+    # Fedora's Firefox has window class org.mozilla.firefox: give every "class<firefox>" window-rewrite rule a
+    # sibling for it with the same glyph (kept alongside; skipped when the rule already exists)
+    if grep -Eq '^[[:space:]]*"class<firefox>": ".*",?$' "$cfg" && ! grep -q 'class<org.mozilla.firefox>' "$cfg"; then
+      awk '
+        { print }
+        /^[[:space:]]*"class<firefox>": ".*",?$/ {
+          indent = $0; sub(/[^[:space:]].*$/, "", indent)
+          glyph = $0; sub(/^[[:space:]]*"class<firefox>": "/, "", glyph); sub(/",?$/, "", glyph)
+          print indent "\"class<org.mozilla.firefox>\": \"" glyph "\","
+        }
+      ' "$cfg" > "$cfg.tmp" && mv "$cfg.tmp" "$cfg"
+      REWRITES+=("$wb/config.jsonc: added class<org.mozilla.firefox> window-rewrite next to class<firefox>")
+    fi
     # waybar tolerates a trailing comma before a } / ] on a following line, jq does not; normalise so the
     # result validates. Newline-anchored on purpose: ",}" inside a string on one line is left alone;
     # a same-line "// comment" after the comma is allowed.
