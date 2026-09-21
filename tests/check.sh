@@ -74,6 +74,12 @@ check test -f /var/home/testuser/.local/state/fedora-hypr/password-change-pendin
 check test "$(stat -c %U /var/home/testuser/.local/state/fedora-hypr/password-change-pending)" = testuser
 check grep -q fh-setup-password /usr/bin/fh-first-run
 check grep -q fh-setup-password /usr/bin/fh-menu
+# time zone: the image ships none (UTC), so fh-first-run prompts via fh-setup-timezone until one is chosen
+check test ! -e /etc/localtime
+check test -x /usr/bin/fh-setup-timezone
+check grep -q fh-setup-timezone /usr/bin/fh-first-run
+check grep -q fh-setup-timezone /usr/bin/fh-menu
+check test -f /usr/share/zoneinfo/tzdata.zi   # timedatectl itself needs the system bus (booted system only)
 # the theme is rendered into the new HOME before any Hyprland session, as that user
 check bash -c 'test "$(cat /var/home/testuser/.config/fedora-hypr/current/theme.name)" = tokyo-night'
 check test -L /var/home/testuser/.config/fedora-hypr/current/background

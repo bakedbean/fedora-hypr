@@ -3,7 +3,7 @@
 #
 # Trimmed for fedora-hypr: keeps only Apps, Learn, Trigger (Capture, Toggle),
 # Style (Theme, Background, Screensaver), Setup (Wifi, Bluetooth, Audio, Power profile,
-# Fingerprint, Password), Update, and System (Lock, Suspend, Restart, Shutdown, Reboot
+# Fingerprint, Password, Time zone), Update, and System (Lock, Suspend, Restart, Shutdown, Reboot
 # to firmware). Everything Arch/Fedora-install-specific (Install, Remove, About, Hardware,
 # Reminder, Share, Font, Setup->Defaults/Config/Security/System)
 # was dropped rather than ported.
@@ -122,13 +122,14 @@ show_screensaver_menu() {
 }
 
 show_setup_menu() {
-  case $(menu "Setup" "  Wifi\n󰂯  Bluetooth\n  Audio\n󱐋  Power Profile\n󰈷  Fingerprint\n  Password") in
+  case $(menu "Setup" "  Wifi\n󰂯  Bluetooth\n  Audio\n󱐋  Power Profile\n󰈷  Fingerprint\n  Password\n  Time zone") in
   *Wifi*) fh-launch-wifi ;;
   *Bluetooth*) fh-launch-bluetooth ;;
   *Audio*) fh-launch-audio ;;
   *Power*) show_setup_power_menu ;;
   *Fingerprint*) fh-setup-fingerprint ;;
   *Password*) present_terminal fh-setup-password ;;
+  *Time*) present_terminal fh-setup-timezone ;;
   *) show_main_menu ;;
   esac
 }

@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# Pick the system time zone. The image ships no /etc/localtime, so a fresh install runs
+# in UTC; fh-first-run opens this in a floating terminal until a zone is chosen (or UTC
+# is explicitly kept). Also reachable from fh-menu (Setup → Time zone).
+set -uo pipefail
+marker="$HOME/.local/state/fedora-hypr/timezone.done"
+
+current=$(timedatectl show -p Timezone --value 2>/dev/null || echo UTC)
+echo -e "\e[32mChoose the time zone for this machine (currently: ${current:-UTC}).\e[0m\n"
+
+zone=$( { echo "$current"; echo "UTC"; timedatectl list-timezones; } | awk '!seen[$0]++' \
+        | gum filter --placeholder "Type a city or region…" --height 15 --header "Time zone")
+if [[ -z $zone ]]; then
+  echo -e "\e[31m\nNo time zone chosen; you will be asked again at next login.\e[0m"
+  exit 1
+fi
+
+if [[ $zone == "$current" ]] || sudo timedatectl set-timezone "$zone"; then
+  mkdir -p "$(dirname "$marker")"
+  touch "$marker"
+  echo -e "\e[32m\nTime zone set to $zone: $(date '+%a %H:%M %Z').\e[0m"
+else
+  echo -e "\e[31m\nTime zone unchanged; you will be asked again at next login.\e[0m"
+  exit 1
+fi

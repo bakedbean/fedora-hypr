@@ -20,8 +20,15 @@ if [[ ! -f $HOME/.config/fedora-hypr/branding/screensaver.txt ]]; then
   cp "$FH_PATH/logo.txt" "$HOME/.config/fedora-hypr/branding/screensaver.txt"
 fi
 
-# After the theme step so the terminal is themed; nothing else waits on this.
-if [[ -f $state/password-change-pending ]]; then
-  fh-launch-floating-terminal-with-presentation fh-setup-password
+# After the theme step so the terminal is themed; nothing else waits on this. Both
+# setup steps run in one floating terminal, password first. The time zone prompt
+# repeats while the system is still on UTC and the user never confirmed a choice.
+setup=()
+[[ -f $state/password-change-pending ]] && setup+=(fh-setup-password)
+if [[ ! -f $state/timezone.done && $(timedatectl show -p Timezone --value 2>/dev/null) == UTC ]]; then
+  setup+=(fh-setup-timezone)
+fi
+if ((${#setup[@]})); then
+  fh-launch-floating-terminal-with-presentation "$(printf '%s; ' "${setup[@]}")"
 fi
 exit 0
