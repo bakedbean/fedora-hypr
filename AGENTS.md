@@ -20,9 +20,11 @@ were overridden during implementation — the code and this file win where they 
 ## Layout (what lives where and why)
 
 ```
-Containerfile              stage rust-build (wsx, waybar-docker) → FROM ghcr.io/ublue-os/base-main:44; packages → COPY --from=rust-build → COPY system/ → services → lint
+Containerfile              stage rust-build (wsx, waybar-docker) → FROM ghcr.io/ublue-os/base-main:44@sha256:…; packages → COPY --from=rust-build → COPY plymouth → initramfs → COPY system/ → services → lint
+                           both FROMs are digest-pinned (see "Updates"); tools/bump-base.sh / `make bump-base` re-pins
 build/10-packages.sh       dnf install from build/packages/{fedora,copr}.txt; COPRs from build/repos/*.repo
-build/20-services.sh       systemctl enable/disable, authselect, cleanup; COPR repo files removed here; initramfs rebuild (Plymouth theme)
+build/15-initramfs.sh      dracut rebuild so the Plymouth theme is in the initramfs; own layer so it caches across system/ edits
+build/20-services.sh       systemctl enable/disable, authselect, cleanup; COPR repo files removed here; gschema compile
 system/                    copied verbatim onto / in the image
   usr/bin/fh-*             ~100 helper scripts (menu, theme, capture, toggles, launchers, first-boot, update-check, screensaver)
   usr/bin/{wsx,waybar-docker}  Rust binaries from the rust-build stage (author's Waybar modules)
@@ -45,10 +47,11 @@ system/                    copied verbatim onto / in the image
 tests/check.sh             in-image self-check (~170 checks); runs theme_test.sh, scripts_test.sh, binds_test.sh
 tests/migrate_test.sh      HOST-side test of tools/migrate-home.sh on a fabricated home (make test-migrate)
 tools/migrate-home.sh      copies the author's Omarchy home onto a target drive (see "Migrating a home from Omarchy")
+tools/bump-base.sh         re-pins the Containerfile FROM digests (weekly CI run commits the result; `make bump-base` locally)
 tools/gen-plymouth-logo.py regenerates the HYPEDORA logo.png from Omarchy's logo (see "Boot splash")
 tools/gen-screensaver-logo.py  regenerates logo.txt (half-block ASCII) reusing gen-plymouth-logo.py's glyph code (see "Screensaver")
 vm.sh / make vm            QEMU smoke test (see Debugging)
-.github/workflows/build.yml  test-migrate (host) → build → check → push :44 and :44-YYYYMMDD on push to main + weekly
+.github/workflows/build.yml  test-migrate (host) → build (registry layer cache) → check → push :44 and :44-YYYYMMDD on push to main + weekly (weekly also re-pins bases and commits)
 ```
 
 Three layers, keep them separate:
@@ -67,7 +70,16 @@ make build      # rebuild localhost/fedora-hypr:44 (config-only changes are fast
 make check      # REQUIRED before commit: runs tests/check.sh inside the image; must be all PASS, lint 0 warnings
 make vm         # boot the image in QEMU; FRESH=1 make vm reinstalls the disk (needed after image changes)
 make push       # manual push to ghcr (normally CI does this)
+make bump-base  # re-pin the FROM digests to today's base-main/fedora (CI does this weekly and commits it)
 ```
+
+To try a change on the machine itself without waiting for CI (~5 min cached, ~15 min cold):
+`sudo podman build -t localhost/fedora-hypr:44 .` (root storage — bootc only sees root's) then
+`sudo bootc switch --transport containers-storage localhost/fedora-hypr:44` and reboot;
+`sudo bootc switch ghcr.io/bakedbean/fedora-hypr:44` returns to the published image. The
+SELinux on the machine denies a container reading `--mount=type=bind` sources under `$HOME`
+(`user_home_t`) unless they are relabelled, so the Containerfile's bind mounts carry `,z`
+(relabels `build/` to `container_file_t`; harmless, and a no-op on CI's Ubuntu runner).
 
 Quick loop without a rebuild (scripts/config only; cannot delete files):
 ```
@@ -82,7 +94,9 @@ The plan-originated bugs that reached the VM all passed 79/79 existence checks.
 
 Commits: conventional (`feat:`, `fix:`, `build:`, `ci:`, `docs:`, `test:`). Push to `main`
 triggers CI; the machine picks it up with `fh-update` (= `bootc upgrade` + flatpak update).
-Fedora release bump = change the `FROM` tag only (`TAG` is derived from it everywhere).
+Fedora release bump = change the `FROM` tag (`TAG` is derived from it everywhere) and run
+`make bump-base` so the digest matches. **`git pull` before pushing**: the weekly CI run commits a
+`build: re-pin base images to current digests` to `main` on your behalf.
 
 ## Conventions
 
@@ -107,7 +121,16 @@ Fedora release bump = change the `FROM` tag only (`TAG` is derived from it every
 ## Updates
 
 CI builds and pushes `:44`/`:44-YYYYMMDD` on every push to `main`, weekly (Sunday 05:30 UTC, after
-ublue's `base-main` rebuild), and on manual dispatch (`gh workflow run build`). Nothing on the
+ublue's `base-main` rebuild), and on manual dispatch (`gh workflow run build`). A push build pulls
+the **registry layer cache** (`ghcr.io/bakedbean/fedora-hypr-cache`, `podman build --cache-from/--cache-to`)
+so a `system/`-only change rebuilds just the COPY + services layers (~4–5 min instead of ~15; a
+`build/` change still re-runs `dnf`, since bind-mounted context content is part of the layer key —
+verified). For the cache to hit, the bases must not move under us: `base-main:44` is rebuilt daily,
+so both `FROM`s are **pinned by digest**. The weekly/dispatch run (`FRESH=true`) re-pins them to the
+current digests (`tools/bump-base.sh`), builds without `--cache-from`, and — only after check + push
+succeed — commits the new pins to `main` as `github-actions[bot]` (a `GITHUB_TOKEN` push does not
+re-trigger the workflow). So base/package updates arrive weekly; a push in between builds on last
+week's base by design. Nothing on the
 machine polls or applies updates automatically: `fh-update-available` (Waybar `custom/update`,
 signal 7, hourly `interval`) is an indicator only — it prints `staged`/`available` and exits 0 when
 `bootc status --format json`'s `.status.staged` is non-null or the booted image's digest differs
@@ -136,11 +159,12 @@ source (mean alpha diff 1/255). Run it in a container if Pillow/numpy are missin
 its docstring); `docs/hypedora-logo-preview.png` is the 2× preview on the splash background.
 Three pieces make it show up: `system/etc/plymouth/plymouthd.conf` (`Theme=hypedora`, the file
 `plymouth-set-default-theme` would write), `plymouth-plugin-script` in `build/packages/fedora.txt`
-(base-main ships only the two-step/text plugins), and an **initramfs rebuild** in `build/20-services.sh` —
+(base-main ships only the two-step/text plugins), and an **initramfs rebuild** in `build/15-initramfs.sh` —
 base-main ships a prebuilt `/usr/lib/modules/$KVER/initramfs.img`, and Plymouth loads the theme from the
 initramfs, so it is regenerated with `dracut --no-hostonly --reproducible --add ostree` (dracut's `plymouth`
 module copies the default theme + plugin; `/var/roothome` is created for the `/root` symlink and removed
-again; ~1 min of build time). `system/usr/lib/bootc/kargs.d/10-fedora-hypr.toml` adds `quiet splash`
+again; ~1 min of build time, in its own layer right after a COPY of just the Plymouth files so other
+`system/` edits don't repeat it). `system/usr/lib/bootc/kargs.d/10-fedora-hypr.toml` adds `quiet splash`
 (plymouthd shows the splash only with `splash`/`rhgb` on the cmdline). bootc honours `kargs.d` at
 install **and** on `bootc upgrade`/`switch` — the diff between the booted and the new image's kargs.d is
 applied to the bootloader entries (bootc docs, "Kernel arguments": "changes to kargs.d files included in
@@ -249,6 +273,11 @@ A failed CI build is safe: the machine keeps its last good image.
   file with `getfattr -n security.selinux` for the right value). Prefer in-place edits from a running
   deployment whenever one still logs in.
 - `chsh` is missing from base-main (lost hardlink of `chfn`); `10-packages.sh` restores it.
+- Building **from a terminal inside the Hyprland session** leaks `NOTIFY_SOCKET` (uwsm's compositor unit
+  is `Type=notify`, Hyprland passes it on) into `podman build`; crun bind-mounts the socket's directory
+  into the build container, so the package layer ends up with an empty `/run/user/1000/systemd/notify`
+  and `bootc container lint` warns `nonempty-run-tmp`. `make build` runs podman under `env -u NOTIFY_SOCKET`;
+  do the same for any hand-run `podman build`. CI (no session) is unaffected.
 - **environment.d cannot reference the manager's own variables** (`$HOME`, `${XDG_RUNTIME_DIR}`): the
   generator only expands what earlier environment.d files defined, so `DOCKER_HOST=unix://${XDG_RUNTIME_DIR}/…`
   reached the session as that literal string (a check that pre-set `XDG_RUNTIME_DIR` for the generator hid

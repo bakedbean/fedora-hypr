@@ -224,7 +224,7 @@ check bash -c 'read -r w h < <(magick identify -format "%w %h" /usr/share/plymou
 # ported theme carries only the attribution line
 check bash -c 'test "$(grep -ril omarchy /usr/share/plymouth)" = /usr/share/plymouth/themes/hypedora/hypedora.script'
 check bash -c 'test "$(grep -ic omarchy /usr/share/plymouth/themes/hypedora/hypedora.script)" = 1 && grep -q "^# Adapted from Omarchy (MIT)" /usr/share/plymouth/themes/hypedora/hypedora.script'
-# theme is inside the shipped initramfs (rebuilt by build/20-services.sh)
+# theme is inside the shipped initramfs (rebuilt by build/15-initramfs.sh)
 check bash -c 'KVER=$(ls /usr/lib/modules | head -1); lsinitrd "/usr/lib/modules/$KVER/initramfs.img" | grep -q hypedora/logo.png'
 check bash -c 'KVER=$(ls /usr/lib/modules | head -1); lsinitrd "/usr/lib/modules/$KVER/initramfs.img" | grep -q lib64/plymouth/script.so'
 check bash -c 'KVER=$(ls /usr/lib/modules | head -1); lsinitrd "/usr/lib/modules/$KVER/initramfs.img" | sed -n "/^dracut modules:/,/^====/p" | grep -qx ostree'

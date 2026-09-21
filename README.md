@@ -140,7 +140,8 @@ fedora-hypr/
 ├── Containerfile               # FROM ghcr.io/ublue-os/base-main:44 … RUN bootc container lint
 ├── build/                      # scripts run during image build
 │   ├── 10-packages.sh          # dnf install from Fedora repos + pinned COPRs
-│   ├── 20-services.sh          # systemctl enable greetd + first-boot units, disable sshd, authselect; drop COPR repo files; rebuild initramfs (Plymouth)
+│   ├── 15-initramfs.sh         # rebuild the initramfs so the Plymouth theme is inside it (own layer: cached across config edits)
+│   ├── 20-services.sh          # systemctl enable greetd + first-boot units, disable sshd, authselect; drop COPR repo files; gsettings
 │   ├── packages/                 # fedora.txt / copr.txt package lists
 │   └── repos/                    # pinned .repo files for COPRs used at build time
 ├── system/                     # copied verbatim onto / in the image (COPY system/ /)
