@@ -55,6 +55,14 @@ check test "$(systemctl is-enabled boot.automount 2>/dev/null)" = masked
 check grep -q pam_fprintd /etc/pam.d/system-auth
 check grep -q 'fingerprint:enabled = true' /etc/skel/.config/hypr/hyprlock.conf
 check zsh -lc 'test "$FH_PATH" = /usr/share/fedora-hypr'
+# Login shells and uwsm's POSIX profile preload must beat Fedora's nano default.
+for shell in bash zsh sh; do
+  check env -u EDITOR -u VISUAL "$shell" -lc 'test "$EDITOR" = nvim && test "$VISUAL" = nvim'
+done
+# An explicitly selected editor still wins in a shell.
+check env EDITOR=vi VISUAL=vim bash -lc 'test "$EDITOR" = vi && test "$VISUAL" = vim'
+# Desktop services get the same defaults without sourcing a shell profile.
+check bash -c 'out=$(env -i PATH=/usr/bin HOME=/nonexistent /usr/lib/systemd/user-environment-generators/30-systemd-environment-d-generator) && eval "$out" && test "$EDITOR" = nvim && test "$VISUAL" = nvim'
 # Nautilus + GTK file choosers show hidden files by default (gschema override, compiled in)
 check test -f /usr/share/glib-2.0/schemas/10-fedora-hypr.gschema.override
 check test "$(gsettings get org.gnome.nautilus.preferences show-hidden-files)" = true

@@ -106,6 +106,10 @@ up; it retries every minute until every app is present. Watch it with
 **Fingerprint:** PAM is already configured for fingerprint auth (login, sudo, polkit, hyprlock). Run
 `fh-setup-fingerprint` (or Setup → Fingerprint in the `fh-menu`) to enrol a finger.
 
+**Editor:** Neovim (`nvim`) is the system default for `EDITOR` and `VISUAL`, in login
+shells and desktop services. Override them in your shell config or
+`~/.config/environment.d/90-editor.conf` for desktop services.
+
 ## Day 2
 
 - A Waybar icon (`custom/update`, `fh-update-available`) appears in the bar when an update is
