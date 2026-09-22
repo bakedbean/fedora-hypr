@@ -10,10 +10,13 @@ for b in Hyprland hyprlock hypridle hyprpicker hyprsunset uwsm \
          alacritty starship lazygit mise impala bluetui wiremix gum greetd tuigreet \
          gpu-screen-recorder hyprland-preview-share-picker firefox nautilus \
          zsh chsh nvim gh btop bat eza fd rg zoxide jq dust tldr fastfetch magick \
-         fcitx5 flatpak cc gcc g++ make; do
+         fcitx5 flatpak cc gcc g++ make strace; do
   check command -v "$b"
 done
 check test -x /usr/libexec/hyprpolkitagent
+# magenta.nvim runs every sandboxed command as `strace -f -qq -e trace=file,... -o FILE -- bash -c CMD`
+# and parses the trace; existence is not enough, ptrace has to actually work.
+check bash -c 't=$(mktemp); strace -f -qq -e trace=file,network,process -e signal=none -o "$t" -- bash -c "cat /etc/os-release >/dev/null" && grep -q "openat(" "$t"'
 # pinned to 0.56.x: 0.57 drops .conf/hyprlang support (AGENTS.md, Lua config migration)
 check bash -c "rpm -q hyprland | grep -q '^hyprland-0.56'"
 check rpm -q fprintd

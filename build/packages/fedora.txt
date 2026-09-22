@@ -45,6 +45,9 @@ gh
 gcc
 gcc-c++
 make
+# strace: magenta.nvim's Linux sandbox has no fallback for capturing bubblewrap
+# denials -- it runs every tool command under strace and refuses to start without it.
+strace
 btop
 bat
 eza
