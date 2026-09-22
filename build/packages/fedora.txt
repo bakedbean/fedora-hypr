@@ -38,6 +38,7 @@ alacritty
 zsh
 tmux
 neovim
+gh
 # nvim-treesitter (main) compiles parsers with cc; also mise/pip/cargo native builds.
 # make: this repo's own workflow (make build/check/vm) has to run on the machine.
 # gcc-c++: node-gyp native modules (node-pty via npm-installed agent harnesses) need g++.
