@@ -2,60 +2,162 @@ name: build
 on:
   push:
     branches: [main]
-    paths-ignore: ['docs/**', 'README.md']
+    paths-ignore: ['**/*.md', 'docs/**']
   schedule:
     - cron: '30 5 * * 0'   # weekly; push to main builds immediately; `gh workflow run build` on demand
   workflow_dispatch:
+    inputs:
+      fresh:
+        description: 're-pin the base digests and build without the layer cache'
+        type: boolean
+        default: true
 
 permissions:
   contents: write     # weekly run commits the re-pinned base digests
   packages: write
 
+# No `concurrency:` on purpose. A group would serialise builds, but GitHub keeps only ONE
+# pending run per group: a branch dispatch arriving behind a queued push to main replaces it
+# and main's build never happens, and a queued weekly fresh build can be displaced by an
+# ordinary push, losing that week's package refresh.
+#
+# What that serialisation was protecting is gone: every step after the build addresses the
+# image by the digest buildx reported, never by a shared mutable tag. What it does NOT protect,
+# and never did: two builds can write :44 out of order, so a slow build of an older commit can
+# land after a fast build of a newer one and roll :44 back to older code. Both images passed
+# their own self-check, so "never publish an image that failed" still holds — freshness does
+# not. That is inherited behaviour, not new here; fix it with a queue that retains pending work
+# if it ever actually bites.
+
 env:
   IMAGE: ghcr.io/${{ github.repository }}
   CACHE: ghcr.io/${{ github.repository }}-cache
   # A push rebuilds only what changed, from the registry layer cache. The weekly run (and a
-  # manual dispatch) re-pins the base images to their current digests and builds from scratch,
-  # so package updates land even though the cache would happily serve last week's layers.
-  FRESH: ${{ github.event_name != 'push' }}
+  # manual dispatch, unless its `fresh` input is cleared) re-pins the base images to their
+  # current digests and builds from scratch, so package updates land even though the cache
+  # would happily serve last week's layers.
+  FRESH: ${{ github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.fresh) }}
+  # Only main moves the tags the machine follows. A workflow_dispatch on a branch
+  # (`gh workflow run build --ref <branch>`) builds, self-checks and exercises the retag onto
+  # a throwaway tag, so a change to this workflow can be measured and verified without any
+  # release tag moving. This is a functional switch, not a security boundary: a branch runs
+  # with the same write token and could edit this file.
+  PUBLISH: ${{ github.ref == 'refs/heads/main' }}
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Derive tag from Containerfile
+      - name: Derive tag and cache key
         run: |
           echo "TAG=$(sed -n 's#^FROM ghcr.io/ublue-os/base-main:\([0-9]*\).*#\1#p' Containerfile)" >> "$GITHUB_ENV"
           echo "DATE=$(date +%Y%m%d)" >> "$GITHUB_ENV"
+          # One cache tag per ref, and it has to be a *valid, unambiguous* tag. Branch names may
+          # contain characters a tag may not (`fix+cache`) or that --cache-to's CSV would read as
+          # option separators (`feature/cache,mode=min`), and naive slashes-to-dashes makes
+          # `feature/cache` and `feature-cache` collide. Sanitise for readability, then append a
+          # hash of the full ref for identity. The ref kind is part of it, so a *tag* named main
+          # cannot land on the main *branch*'s cache.
+          key() { printf '%s-%s' "$(printf '%s' "$1" | tr -c 'A-Za-z0-9._-' '-' | cut -c1-40)" "$(printf '%s' "$1" | sha256sum | cut -c1-12)"; }
+          echo "CACHE_TAG=$(key "$GITHUB_REF")" >> "$GITHUB_ENV"
+          echo "CACHE_MAIN=$(key refs/heads/main)" >> "$GITHUB_ENV"
       - name: Host-side test of tools/migrate-home.sh
         run: |
           for t in rsync jq perl shellcheck zsh; do command -v "$t" >/dev/null || missing="$missing $t"; done
           if [ -n "${missing:-}" ]; then sudo apt-get update -q && sudo apt-get install -y -q $missing; fi
           make test-migrate
+      # The docker-container driver, not the default one: only it can export a registry cache.
+      # Pinned by commit (v3 = 8d2750c): this job holds contents:write and packages:write and
+      # publishes the image a real machine boots from, so its actions should not be mutable refs.
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f  # v3
+      # docker for the buildx push, podman for the self-check pull (see the Self-check step)
       - name: Login
-        run: echo "${{ secrets.GITHUB_TOKEN }}" | sudo podman login ghcr.io -u "${{ github.actor }}" --password-stdin
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+          echo "${{ secrets.GITHUB_TOKEN }}" | sudo podman login ghcr.io -u "${{ github.actor }}" --password-stdin
       - name: Re-pin base images to current digests
         if: env.FRESH == 'true'
         run: tools/bump-base.sh
+      # Built with BuildKit, not podman: the runner ships podman 4.9.3, whose --cache-to
+      # re-commits the whole ~10 GB image after every step — each trivial COPY cost roughly a
+      # minute, so most of a 17-minute build was commit and cache-push overhead around ~6
+      # minutes of actual dnf/dracut work. BuildKit snapshots instead and exports once.
+      # The Containerfile is unchanged and still plain podman-buildable (`make build`).
       - name: Build
         run: |
-          # Diagnostics for a failed build: the runner's free disk (the image is ~10 GB, the rust
-          # stage ~3 GB; ubuntu-latest has ~20 GB) and the buildah that did the cache handling.
-          df -h / && sudo podman version
-          if [ "$FRESH" = true ]; then from=(); else from=(--cache-from "$CACHE"); fi
-          sudo podman build --layers "${from[@]}" --cache-to "$CACHE" \
-            -t "$IMAGE:$TAG" -t "$IMAGE:$TAG-$DATE" .
+          df -h /    # the image is ~10 GB, the rust stage ~3 GB; ubuntu-latest had ~85 GB free
+          # A registry cache tag holds the layer chain of the build that last wrote it, so a
+          # branch sharing main's tag would leave main's next build with a cache for content it
+          # is not building. Branches read main's and write their own; main reads/writes its own.
+          from=()
+          if [ "$FRESH" != true ]; then
+            from=(--cache-from "type=registry,ref=$CACHE:$CACHE_MAIN")
+            [ "$CACHE_TAG" = "$CACHE_MAIN" ] || from+=(--cache-from "type=registry,ref=$CACHE:$CACHE_TAG")
+          fi
+          # --provenance/--sbom off: either one makes buildx push a manifest *index* instead of
+          # a plain manifest, and fh-update-available compares `skopeo inspect`'s .Digest against
+          # the digest bootc records for the booted image — an index digest never matches.
+          # -f: buildx only looks for `Dockerfile` by default, podman also accepts `Containerfile`
+          docker buildx build -f Containerfile "${from[@]}" \
+            --cache-to "type=registry,ref=$CACHE:$CACHE_TAG,mode=max" \
+            --provenance=false --sbom=false \
+            --metadata-file "$RUNNER_TEMP/build.json" \
+            --tag "$IMAGE:ci-staging" --push .
+          # Everything downstream refers to this digest, never to :ci-staging. That tag exists
+          # only to give the push a name and to keep the manifest from being garbage-collected;
+          # if another run overwrites it, what this run checks and promotes is unaffected.
+          digest=$(jq -er '."containerimage.digest"' "$RUNNER_TEMP/build.json")
+          echo "DIGEST=$digest" >> "$GITHUB_ENV"
+          echo "built $IMAGE@$digest"
+      # podman, not docker: base-main brings the image to ~270 layers and dockerd's overlay2
+      # refuses to unpack more than 127 ("failed to register layer: max depth exceeded").
+      # BuildKit builds and pushes it regardless, and ostree does not stack layers at all,
+      # so this is a dockerd limit only — nothing to fix in the image.
       - name: Self-check
-        run: sudo podman run --rm -v ./tests:/tests:ro "$IMAGE:$TAG" bash /tests/check.sh
-      - name: Push
+        run: sudo podman run --rm -v "$PWD/tests:/tests:ro" "$IMAGE@$DIGEST" bash /tests/check.sh
+      # Retag the self-checked digest. Same repository, so each of these writes one manifest and
+      # moves no data. NOT gated on PUBLISH: a branch run still performs the retag, onto a tag
+      # unique to the run, because promotion is the one place a release tag's digest can change
+      # and so must not be the one path CI never exercises — skipping it on branches is exactly
+      # how the --prefer-index default below went unnoticed until review.
+      - name: Publish
         run: |
-          sudo podman push "$IMAGE:$TAG"
-          sudo podman push "$IMAGE:$TAG-$DATE"
+          want=${DIGEST#sha256:}
+          # --prefer-index=false: given a single plain-manifest source, `create` defaults to
+          # wrapping it in an image index, which would undo --provenance/--sbom above and break
+          # fh-update-available's digest comparison exactly as an attestation would. Verified:
+          # without this flag the retag turned sha256:35cae665 into sha256:ff3f3666 with
+          # mediaType application/vnd.oci.image.index.v1+json (run 35741154439).
+          #
+          # Prove the retag is digest-preserving on a tag unique to this run+attempt, which no
+          # other run can write. Reading a *release* tag back cannot prove it: a concurrent run
+          # writing the same destination between our write and our read would make us fail on
+          # its digest rather than ours. (These ci-promote-* tags accumulate; prune at will —
+          # each shares a digest with a real tag, so delete the tag, never the package version.)
+          probe="$IMAGE:ci-promote-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          docker buildx imagetools create --prefer-index=false -t "$probe" "$IMAGE@$DIGEST"
+          got=$(docker buildx imagetools inspect --raw "$probe" | sha256sum | cut -d' ' -f1)
+          if [ "$got" != "$want" ]; then
+            echo "::error::retagging $DIGEST produced sha256:$got — the retag rewrapped the manifest"
+            exit 1
+          fi
+          echo "retag verified digest-preserving: $probe = $DIGEST"
+          # Identical operation on an identical source, so these are digest-preserving too —
+          # and they are not read back, so no concurrent writer can make them fail spuriously.
+          # On a branch this list is empty: the probe above is the whole exercise.
+          if [ "$PUBLISH" = true ]; then
+            for t in "$IMAGE:$TAG-$DATE" "$IMAGE:$TAG"; do
+              docker buildx imagetools create --prefer-index=false -t "$t" "$IMAGE@$DIGEST"
+              echo "$t = $DIGEST"
+            done
+          fi
       # Only after the image built, passed and is published: main must never point at a
       # digest that did not build. A push by GITHUB_TOKEN does not trigger this workflow again.
+      # This `git push` can still lose a race with a human push to main during the build; it
+      # then fails loudly and the pins are simply re-derived by the next weekly run.
       - name: Commit re-pinned base digests
-        if: env.FRESH == 'true'
+        if: env.FRESH == 'true' && env.PUBLISH == 'true'
         run: |
           git diff --quiet -- Containerfile && { echo "bases unchanged"; exit 0; }
           git config user.name  "github-actions[bot]"
