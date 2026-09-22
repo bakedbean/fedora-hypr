@@ -310,6 +310,13 @@ A failed CI build is safe: the machine keeps its last good image.
   user-installed tools (RadioBar). Session-wide env that needs expansion goes in `/usr/share/uwsm/env`
   (uwsm looks in `XDG_CONFIG_HOME`, `XDG_CONFIG_DIRS`, `XDG_DATA_DIRS` for `uwsm/env`); `PATH` is on
   uwsm's `always_export` list. Verify with `systemctl --user show-environment` on a booted system.
+- **`rpm-ostree install` is a dead end here: layering does not survive `bootc upgrade`.** A layered
+  package makes the booted deployment locally modified and `bootc upgrade` then exits immediately
+  without fetching; the way out is `rpm-ostree reset`, which throws the package away with the
+  modification. So a package installed that way vanishes at the next update, silently — `strace`
+  (layered 2026-09-21 with `--apply-live`, reset the same evening to unblock an upgrade) took
+  magenta.nvim's Linux sandbox down with it. Anything that must stay goes in
+  `build/packages/fedora.txt` and ships in the image; layering is only ever a throwaway experiment.
 
 ## Migrating a home
 
