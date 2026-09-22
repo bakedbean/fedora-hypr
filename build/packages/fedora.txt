@@ -57,6 +57,7 @@ direnv
 fastfetch
 ImageMagick
 podman-docker
+docker-compose
 # browsers + desktop apps
 chromium
 nautilus

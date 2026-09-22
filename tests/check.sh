@@ -203,6 +203,10 @@ check test -f /usr/lib/systemd/user/podman.socket
 # podman-docker prints an "Emulate Docker CLI" banner on every docker call unless this file exists
 check test -f /etc/containers/nodocker
 check grep -q 'exec-once = systemctl --user start podman.socket' /usr/share/fedora-hypr/default/hypr/autostart.conf
+# docker-compose ships the Compose v2 plugin where `podman compose` (and thus `docker compose`
+# via the podman-docker shim) looks for an external provider; `version` only execs the provider
+check test -x /usr/libexec/docker/cli-plugins/docker-compose
+check podman compose version
 
 # --- TUI launchers: Omarchy's stock "Docker"/"Disk Usage" app-launcher entries. Its
 # install/packaging/tuis.sh wrote them into ~/.local/share/applications at install time
