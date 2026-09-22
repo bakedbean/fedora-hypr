@@ -20,7 +20,7 @@ were overridden during implementation — the code and this file win where they 
 ## Layout (what lives where and why)
 
 ```
-Containerfile              stage rust-build (wsx, waybar-docker) → FROM ghcr.io/ublue-os/base-main:44@sha256:…; packages → COPY --from=rust-build → COPY plymouth → initramfs → COPY system/ → services → lint
+Containerfile              stage rust-build (wsx, waybar-docker) → FROM ghcr.io/ublue-os/base-main:44@sha256:…; COPY build/ /ctx → packages → COPY --from=rust-build → COPY plymouth → initramfs → COPY system/ → services → lint
                            both FROMs are digest-pinned (see "Updates"); tools/bump-base.sh / `make bump-base` re-pins
 build/10-packages.sh       dnf install from build/packages/{fedora,copr}.txt; COPRs from build/repos/*.repo
 build/15-initramfs.sh      dracut rebuild so the Plymouth theme is in the initramfs; own layer so it caches across system/ edits
@@ -79,10 +79,9 @@ make bump-base  # re-pin the FROM digests to today's base-main/fedora (CI does t
 To try a change on the machine itself without waiting for CI (~5 min cached, ~15 min cold):
 `sudo podman build -t localhost/fedora-hypr:44 .` (root storage — bootc only sees root's) then
 `sudo bootc switch --transport containers-storage localhost/fedora-hypr:44` and reboot;
-`sudo bootc switch ghcr.io/bakedbean/fedora-hypr:44` returns to the published image. The
-SELinux on the machine denies a container reading `--mount=type=bind` sources under `$HOME`
-(`user_home_t`) unless they are relabelled, so the Containerfile's bind mounts carry `,z`
-(relabels `build/` to `container_file_t`; harmless, and a no-op on CI's Ubuntu runner).
+`sudo bootc switch ghcr.io/bakedbean/fedora-hypr:44` returns to the published image. If you ever
+add a `--mount=type=bind` to the Containerfile, give it `,z`: SELinux on the machine denies a container
+reading bind sources under `$HOME` (`user_home_t`) unless relabelled (`build/` is `COPY`ed now, see "Updates").
 
 Quick loop without a rebuild (scripts/config only; cannot delete files):
 ```
@@ -133,9 +132,11 @@ Fedora release bump = change the `FROM` tag (`TAG` is derived from it everywhere
 CI builds and pushes `:44`/`:44-YYYYMMDD` on every push to `main`, weekly (Sunday 05:30 UTC, after
 ublue's `base-main` rebuild), and on manual dispatch (`gh workflow run build`). A push build pulls
 the **registry layer cache** (`ghcr.io/bakedbean/fedora-hypr-cache`, `podman build --cache-from/--cache-to`)
-so a `system/`-only change rebuilds just the COPY + services layers (~4–5 min instead of ~15; a
-`build/` change still re-runs `dnf`, since bind-mounted context content is part of the layer key —
-verified). For the cache to hit, the bases must not move under us: `base-main:44` is rebuilt daily,
+so a `system/`-only change rebuilds just the COPY + services layers (~4–5 min instead of ~15). `build/`
+is `COPY`ed to `/ctx` (removed again in the last RUN) rather than bind-mounted **because the registry
+cache does not key on bind-mount sources**: a `build/packages/fedora.txt` edit was silently built on the
+old package layer (3-min build, self-check failed on the missing binary). A COPY's content is always part
+of the layer key, so a `build/` change re-runs `dnf`. For the cache to hit, the bases must not move under us: `base-main:44` is rebuilt daily,
 so both `FROM`s are **pinned by digest**. The weekly/dispatch run (`FRESH=true`) re-pins them to the
 current digests (`tools/bump-base.sh`), builds without `--cache-from`, and — only after check + push
 succeed — commits the new pins to `main` as `github-actions[bot]` (a `GITHUB_TOKEN` push does not

@@ -258,6 +258,7 @@ check bash -c 'KVER=$(ls /usr/lib/modules | head -1); lsinitrd "/usr/lib/modules
 check bash -c 'KVER=$(ls /usr/lib/modules | head -1); lsinitrd "/usr/lib/modules/$KVER/initramfs.img" | grep -q lib64/plymouth/script.so'
 check bash -c 'KVER=$(ls /usr/lib/modules | head -1); lsinitrd "/usr/lib/modules/$KVER/initramfs.img" | sed -n "/^dracut modules:/,/^====/p" | grep -qx ostree'
 check test ! -e /var/roothome   # dracut helper dir removed again (lint: nothing under /var)
+check test ! -e /ctx            # build/ COPY removed again after 20-services.sh
 # kernel args: bootc applies kargs.d at install and reconciles the diff on upgrade
 check test -f /usr/lib/bootc/kargs.d/10-fedora-hypr.toml
 check python3 -c 'import tomllib; k = tomllib.load(open("/usr/lib/bootc/kargs.d/10-fedora-hypr.toml", "rb"))["kargs"]; assert "quiet" in k and "splash" in k'

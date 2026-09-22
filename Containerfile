@@ -20,11 +20,14 @@ RUN --mount=type=cache,target=/root/.cargo/registry \
 # --- Stage 2: the image
 FROM ghcr.io/ublue-os/base-main:44@sha256:e8c5e861c28245f9cbe669e40a68ba167d405a67a3f1fa519dd85d879f78341e
 
+# build/ is COPYed (not bind-mounted) so its content is part of the layer key: CI's
+# registry cache (--cache-from) ignores bind-mount sources and reused a stale package
+# layer after a packages.txt edit. Removed again in the last RUN.
+COPY build/ /ctx/
+
 # Packages first: this layer only changes when build/ changes, so config-only
 # rebuilds (system/ changes) reuse it from cache instead of reinstalling.
-RUN --mount=type=bind,source=build,target=/ctx,z \
-    --mount=type=cache,dst=/var/cache/dnf \
-    /ctx/10-packages.sh
+RUN --mount=type=cache,dst=/var/cache/dnf /ctx/10-packages.sh
 
 # Rust binaries from the build stage (right after packages: config-only rebuilds stay fast)
 COPY --from=rust-build /out/bin/wsx /usr/bin/wsx
@@ -34,13 +37,11 @@ COPY --from=rust-build /out/bin/waybar-docker /usr/bin/waybar-docker
 # so copy just those first: the ~1 min dracut layer then caches across all other system/ edits.
 COPY system/etc/plymouth/ /etc/plymouth/
 COPY system/usr/share/plymouth/ /usr/share/plymouth/
-RUN --mount=type=bind,source=build,target=/ctx,z \
-    /ctx/15-initramfs.sh
+RUN /ctx/15-initramfs.sh
 
 # Image-owned files: scripts, defaults, themes, units, skel
 COPY system/ /
 
-RUN --mount=type=bind,source=build,target=/ctx,z \
-    /ctx/20-services.sh
+RUN /ctx/20-services.sh && rm -rf /ctx
 
 RUN bootc container lint
