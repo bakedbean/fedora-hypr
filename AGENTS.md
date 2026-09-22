@@ -54,7 +54,7 @@ tools/bump-base.sh         re-pins the Containerfile FROM digests (weekly CI run
 tools/gen-plymouth-logo.py regenerates the HYPEDORA logo.png from the upstream wordmark (see "Boot splash")
 tools/gen-screensaver-logo.py  regenerates logo.txt (half-block ASCII) reusing gen-plymouth-logo.py's glyph code (see "Screensaver")
 vm.sh / make vm            QEMU smoke test (see Debugging)
-.github/workflows/build.yml  test-migrate (host) → build (registry layer cache) → check → push :44 and :44-YYYYMMDD on push to main + weekly (weekly also re-pins bases and commits)
+.github/workflows/build.yml  test-migrate (host) → buildx build (BuildKit, registry layer cache) → push :ci-staging → check → retag :44 and :44-YYYYMMDD, on push to main + weekly (weekly also re-pins bases and commits)
 ```
 
 Three layers, keep them separate:
@@ -129,20 +129,107 @@ Fedora release bump = change the `FROM` tag (`TAG` is derived from it everywhere
 
 ## Updates
 
-CI builds and pushes `:44`/`:44-YYYYMMDD` on every push to `main`, weekly (Sunday 05:30 UTC, after
-ublue's `base-main` rebuild), and on manual dispatch (`gh workflow run build`). A push build pulls
-the **registry layer cache** (`ghcr.io/bakedbean/fedora-hypr-cache`, `podman build --cache-from/--cache-to`)
-so a `system/`-only change rebuilds just the COPY + services layers (~4–5 min instead of ~15). `build/`
-is `COPY`ed to `/ctx` (removed again in the last RUN) rather than bind-mounted **because the registry
-cache does not key on bind-mount sources**: a `build/packages/fedora.txt` edit was silently built on the
-old package layer (3-min build, self-check failed on the missing binary). A COPY's content is always part
-of the layer key, so a `build/` change re-runs `dnf`. For the cache to hit, the bases must not move under us: `base-main:44` is rebuilt daily,
-so both `FROM`s are **pinned by digest**. The weekly/dispatch run (`FRESH=true`) re-pins them to the
-current digests (`tools/bump-base.sh`), builds without `--cache-from`, and — only after check + push
-succeed — commits the new pins to `main` as `github-actions[bot]` (a `GITHUB_TOKEN` push does not
-re-trigger the workflow). So base/package updates arrive weekly; a push in between builds on last
-week's base by design. Nothing on the
-machine polls or applies updates automatically: `fh-update-available` (Waybar `custom/update`,
+CI builds and publishes `:44`/`:44-YYYYMMDD` on every push to `main` outside
+`paths-ignore: ['**/*.md', 'docs/**']` — that is, any Markdown anywhere, plus everything under
+`docs/` whatever its extension — weekly (Sunday 05:30 UTC, after ublue's `base-main` rebuild),
+and on manual dispatch (`gh workflow run build`).
+
+The build runs on **BuildKit** (`docker buildx build -f Containerfile`), not podman. The runner
+ships Ubuntu 24.04's **podman 4.9.3**, whose `--cache-to` re-commits the whole ~10 GB image after
+every step: in the last podman build (run 35721796071) six trivial `COPY`s cost 48–72 s each
+(~62 s on average), and its 17m06s build step was ~7m20s of layer commits plus ~3m15s of cache
+pushes wrapped around ~6 minutes of actual `dnf` + `dracut`. BuildKit snapshots instead and
+exports layers once. Build step, same package-layer rebuild: **17m06s → 5m57s**; fully cached:
+**3m23s → 26 s**. Whole run, created→updated: **18m33s → 8m38s** and **4m43s → 3m22s** (runs
+35721796071 and 35676828839 under podman, 35730389096 and 35728725250 under BuildKit). The
+BuildKit job totals carry a cost the podman ones did not: the self-check now pulls the image
+back (below).
+The `Containerfile` is plain Dockerfile syntax and is **not**
+BuildKit-specific — `make build` still uses podman locally and the two must stay interchangeable,
+so nothing buildx-only may go in it.
+
+Three things on that command are load-bearing, all for the same reason: **the published manifest
+must stay a plain manifest, not an index.** `fh-update-available` compares `skopeo inspect`'s
+`.Digest` against the digest bootc recorded for the booted image, and an index digest never
+matches one, so the indicator would claim an update on every poll forever.
+
+- `-f Containerfile` — buildx only looks for `Dockerfile`.
+- `--provenance=false --sbom=false` on the build — either attestation makes buildx push an index.
+- `--prefer-index=false` on the **retag** — `imagetools create` given a single plain-manifest
+  source defaults to wrapping it in an index, which silently undoes the two flags above. Measured
+  in run 35741154439: the same image retagged without the flag went from `sha256:35cae665` to
+  `sha256:ff3f3666`, `mediaType application/vnd.oci.image.index.v1+json`.
+
+Because that is easy to reintroduce, the Publish step asserts it — but on a tag unique to the
+run (`:ci-promote-<run id>-<attempt>`), not on a release tag. It retags the digest there, reads
+that back, and only writes `:44-YYYYMMDD` and `:44` once the operation has proved
+digest-preserving. Reading a release tag back would be racy: a concurrent run writing the same
+destination between our write and our read would fail us on *its* digest, not ours. The release
+writes are the identical operation on the identical source and are not read back, so no
+concurrent writer can make them fail spuriously. Those `ci-promote-*` tags accumulate; prune the
+*tags* if they bother you, never the package versions — each shares a digest with a real tag.
+
+The image is pushed once, to `:ci-staging`, and **everything after the build refers to it by the
+digest buildx reported** (`--metadata-file`), never by that tag: the self-check runs
+`$IMAGE@$DIGEST` and the retag promotes `$IMAGE@$DIGEST`. So what gets published is by
+construction the exact bytes that passed `tests/check.sh`, even if a concurrent run overwrites
+`:ci-staging` in between — the tag exists only to name the push and keep the manifest from being
+garbage-collected. `:44-YYYYMMDD` is written and verified first and `:44` last, so the tag the
+machine follows moves only after the dated tag has proved the retag preserves the digest. An
+image that fails the check is never promoted, though it does remain reachable via `:ci-staging`
+and the layer cache until something overwrites them.
+
+There is deliberately **no `concurrency:` group**. Serialising builds sounds right, but GitHub
+keeps only one *pending* run per group, so a branch dispatch arriving behind a queued push to
+`main` would replace it and main's build would simply never happen — and a queued weekly fresh
+build could be displaced by an ordinary push, losing that week's package refresh. Digest pinning
+is what makes the serialisation unnecessary for *correctness of what is published*.
+
+It does not make it unnecessary for **ordering**, and never was: two builds can write `:44` out
+of order, so a slow build of an older commit can land after a fast build of a newer one and roll
+`:44` back to older code. Both images passed their own self-check, so "never publish an image
+that failed" holds; freshness does not. This is inherited behaviour rather than anything the
+BuildKit switch introduced — if it ever bites, the fix is a queue that retains pending work, not
+a plain `concurrency:` group.
+
+The self-check runs under **`sudo podman run`**, not `docker run`: see "Things that already bit
+us". It pulls the 4.5 GB back from ghcr and is now the largest line item in a cached run (~2 min
+of a 3m22s job) — the obvious next thing to attack if this needs to get faster.
+
+Publishing is gated on `github.ref == 'refs/heads/main'`, so **`gh workflow run build --ref
+<branch>` builds, self-checks and retags without moving any release tag** — that is how to measure
+or debug a change to this workflow before it can reach an installed machine. It is not a security
+boundary: a branch runs with the same write token and could edit the workflow. Note the Publish
+step is *not* skipped on a branch, it just retags onto `:ci-verify-<ref>`; promotion is the one
+place a release tag's digest can change, so it must not be the one path CI never exercises —
+skipping it on branches is exactly how the `--prefer-index` default above survived four green
+trial runs. A branch run does write `:ci-staging`, a `:ci-promote-*` tag and a cache tag, so
+"publishes nothing" is too strong; it moves no tag anyone follows. `workflow_dispatch` also takes a `fresh` input (default
+true) choosing between the weekly cold build and a cache-using one.
+
+The layer cache is `ghcr.io/bakedbean/fedora-hypr-cache`, `--cache-from/--cache-to
+type=registry,…,mode=max`, **one tag per ref**; a branch reads main's tag and its own, main reads
+and writes only its own. A registry cache tag holds the layer chain of the build that last wrote
+it, so a shared tag would leave main's next build holding a cache for content it is not building.
+The tag is `<sanitised ref>-<12 hex of sha256(full ref)>` (`refs/heads/main` →
+`refs-heads-main-f921bd05e68b`) rather than the branch name: a branch name can contain characters
+a tag may not (`fix+cache`) or that `--cache-to`'s CSV would read as option separators
+(`feature/cache,mode=min`), and simply replacing `/` with `-` collides `feature/cache` with
+`feature-cache`. Hashing the whole ref also keeps a *tag* named `main` off the main *branch*'s
+cache. BuildKit cannot
+read the buildah-format cache that lived in that repo before, so its old key-named tags are dead
+weight and can be pruned. `build/` is `COPY`ed to `/ctx` (removed again in the last RUN) rather
+than bind-mounted **because podman's registry cache did not key on bind-mount sources**: a
+`build/packages/fedora.txt` edit was silently built on the old package layer (3-min build,
+self-check failed on the missing binary). A COPY's content is part of the layer key under either
+engine, so a `build/` change re-runs `dnf`. For the cache to hit, the bases must not move under
+us: `base-main:44` is rebuilt daily, so both `FROM`s are **pinned by digest**. The weekly/dispatch
+run (`FRESH=true`) re-pins them to the current digests (`tools/bump-base.sh`), builds without
+`--cache-from`, and — only after check + publish succeed — commits the new pins to `main` as
+`github-actions[bot]` (a `GITHUB_TOKEN` push does not re-trigger the workflow). So base/package
+updates arrive weekly; a push in between builds on last week's base by design.
+
+Nothing on the machine polls or applies updates automatically: `fh-update-available` (Waybar `custom/update`,
 signal 7, hourly `interval`) is an indicator only — it prints `staged`/`available` and exits 0 when
 `bootc status --format json`'s `.status.staged` is non-null or the booted image's digest differs
 from the registry's (via `skopeo inspect`), else prints nothing and exits 1 so Waybar hides the
@@ -157,6 +244,16 @@ fixed argument list, read-only subcommand) so the access granted is exactly "rea
 unprivileged", nothing else `bootc`/`sudo` can do. Any failure (rule missing, offline, skopeo
 digest mismatch check failing) is treated as "up to date" — the indicator never shows a false
 positive.
+
+If CI is ever still too slow for a one-package turnaround, the machine can build it itself: a
+cached `make build` here is ~4 s and a full package-layer rebuild ~2m54s. `sudo podman build`
+(root storage — bootc only sees root's) plus `sudo bootc switch --transport containers-storage
+localhost/fedora-hypr:44` makes `bootc upgrade` track local storage instead of ghcr. That leaves
+the registry as install media only, and `fh-update-available` stops predicting updates — its
+`skopeo inspect docker://localhost/…` cannot resolve, which it treats as "up to date". It still
+reports `staged`, since that comes from `bootc status` before the registry is consulted, so the
+indicator appears after a local `bootc upgrade` has staged something but never before. A
+deliberate detour, not the default.
 
 ## Boot splash
 
@@ -310,6 +407,18 @@ A failed CI build is safe: the machine keeps its last good image.
   user-installed tools (RadioBar). Session-wide env that needs expansion goes in `/usr/share/uwsm/env`
   (uwsm looks in `XDG_CONFIG_HOME`, `XDG_CONFIG_DIRS`, `XDG_DATA_DIRS` for `uwsm/env`); `PATH` is on
   uwsm's `always_export` list. Verify with `systemctl --user show-environment` on a booted system.
+- **`docker buildx imagetools create` rewraps a single manifest into an index by default.**
+  `--prefer-index` defaults to true, so retagging one plain-manifest source produces an *index*
+  with a different digest — silently undoing `--provenance=false --sbom=false` on the build and
+  breaking `fh-update-available`'s digest comparison. Pass `--prefer-index=false`, and note CI
+  asserts the promoted tag's digest equals the self-checked one, so a regression fails the job
+  rather than shipping. Found in review, not by four green CI runs, because those runs skipped
+  the publish step entirely — which is why branch runs now exercise it onto a throwaway tag.
+- **dockerd cannot unpack this image: overlay2 caps a container at 127 layers.** `base-main` alone
+  brings it to ~270, and `docker run` fails with `failed to register layer: max depth exceeded`.
+  BuildKit builds and pushes it regardless and ostree does not stack layers at all, so this is a
+  dockerd limit only — nothing to fix in the image. CI's self-check runs under `sudo podman run`
+  for exactly this reason; don't "simplify" it to `docker run` because the build step uses docker.
 - **`rpm-ostree install` is a dead end here: layering does not survive `bootc upgrade`.** A layered
   package makes the booted deployment locally modified and `bootc upgrade` then exits immediately
   without fetching; the way out is `rpm-ostree reset`, which throws the package away with the

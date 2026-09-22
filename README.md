@@ -135,12 +135,15 @@ shells and desktop services. Override them in your shell config or
 
 ## CI
 
-`.github/workflows/build.yml` builds the image, runs `tests/check.sh` inside it, and pushes
-`ghcr.io/bakedbean/fedora-hypr:44` and `ghcr.io/bakedbean/fedora-hypr:44-YYYYMMDD` on every push to
-`main`, on a weekly schedule (Sunday 05:30 UTC, after ublue's `base-main` rebuilds), and on manual
-dispatch (`gh workflow run build`). The tag is
+`.github/workflows/build.yml` builds the image with BuildKit (`docker buildx`), pushes it to a
+`:ci-staging` tag, runs `tests/check.sh` inside it, and only then retags it to
+`ghcr.io/bakedbean/fedora-hypr:44` and `ghcr.io/bakedbean/fedora-hypr:44-YYYYMMDD` — so the tags
+your machine follows never move to an image that failed its self-check. It runs on every push to
+`main` that changes something other than Markdown, on a weekly schedule (Sunday 05:30 UTC, after
+ublue's `base-main` rebuilds), and on manual dispatch (`gh workflow run build`). The tag is
 derived from the `Containerfile`'s `FROM` line the same way the `Makefile` derives it, so it's never
-hard-coded in the workflow.
+hard-coded in the workflow. `gh workflow run build --ref <branch>` builds and checks a branch
+without moving any release tag (it does push a staging tag and a layer cache).
 
 ## Layout
 
@@ -177,7 +180,7 @@ fedora-hypr/
 ├── tools/                       # migrate-home.sh (existing home → drive), gen-plymouth-logo.py (HYPEDORA wordmark)
 ├── vm.sh                        # install-to-raw-disk + QEMU boot for local smoke testing
 ├── Makefile                     # build / shell / check / push / vm targets
-└── .github/workflows/build.yml  # CI: build, self-check, push to ghcr.io
+└── .github/workflows/build.yml  # CI: buildx build, self-check on :ci-staging, retag to ghcr.io
 ```
 
 Three layers:
