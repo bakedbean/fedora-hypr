@@ -40,6 +40,9 @@ jobs:
         run: tools/bump-base.sh
       - name: Build
         run: |
+          # Diagnostics for a failed build: the runner's free disk (the image is ~10 GB, the rust
+          # stage ~3 GB; ubuntu-latest has ~20 GB) and the buildah that did the cache handling.
+          df -h / && sudo podman version
           if [ "$FRESH" = true ]; then from=(); else from=(--cache-from "$CACHE"); fi
           sudo podman build --layers "${from[@]}" --cache-to "$CACHE" \
             -t "$IMAGE:$TAG" -t "$IMAGE:$TAG-$DATE" .
