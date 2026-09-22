@@ -11,7 +11,9 @@ cd "$(dirname "$0")/.."
 before=$(mktemp); cp Containerfile "$before"; trap 'rm -f "$before"' EXIT
 mapfile -t refs < <(sed -nE 's/^FROM ([^@[:space:]]+)(@sha256:[0-9a-f]+)?([[:space:]].*)?$/\1/p' Containerfile)
 for ref in "${refs[@]}"; do
-  digest=$(skopeo inspect --no-tags "docker://$ref" | jq -r .Digest)
+  # --no-creds: both bases are public; without it skopeo reads the user's auth.json, which the
+  # CI runner cannot open (/run/user/1001/containers/auth.json: permission denied).
+  digest=$(skopeo inspect --no-tags --no-creds "docker://$ref" | jq -r .Digest)
   [[ $digest == sha256:* ]] || { echo "bump-base: could not resolve $ref" >&2; exit 1; }
   # `#` is safe as the sed delimiter: neither refs nor digests contain it
   sed -i -E "s#^FROM ${ref}(@sha256:[0-9a-f]+)?([[:space:]]|\$)#FROM ${ref}@${digest}\2#" Containerfile
