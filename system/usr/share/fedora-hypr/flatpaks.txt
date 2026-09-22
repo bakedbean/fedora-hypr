@@ -7,3 +7,4 @@ com.github.PintaProject.Pinta
 com.github.xournalpp.xournalpp
 org.localsend.localsend_app
 com.onepassword.OnePassword
+io.dbeaver.DBeaverCommunity

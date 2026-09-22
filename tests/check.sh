@@ -108,6 +108,10 @@ check bash -c 'FH_USER=testuser2 fh-first-boot-user && test -f /var/lib/fedora-h
 # flatpaks: an empty list succeeds and writes the marker; a failing app leaves no marker
 check bash -c 'rm -f /var/lib/fedora-hypr/flatpaks.done; FH_FLATPAKS_LIST=/dev/null fh-first-boot-flatpaks && test -f /var/lib/fedora-hypr/flatpaks.done'
 check bash -c 'rm -f /var/lib/fedora-hypr/flatpaks.done; l=$(mktemp); echo org.example.DoesNotExist > "$l"; ! FH_FLATPAKS_LIST=$l fh-first-boot-flatpaks && ! test -f /var/lib/fedora-hypr/flatpaks.done'
+# every shipped entry is a reverse-DNS app id flatpak will accept (a typo here only
+# surfaces on a real first boot, where the unit then retries forever)
+check bash -c '! grep -vE "^\\s*(#|$)|^[A-Za-z][A-Za-z0-9-]*(\\.[A-Za-z0-9_-]+)+$" /usr/share/fedora-hypr/flatpaks.txt'
+check grep -qx io.dbeaver.DBeaverCommunity /usr/share/fedora-hypr/flatpaks.txt
 
 # --- Task 5: theme engine
 check bash /tests/theme_test.sh
