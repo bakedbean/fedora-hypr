@@ -143,6 +143,14 @@ check bash -c '
   export XDG_RUNTIME_DIR=$(mktemp -d); chmod 700 "$XDG_RUNTIME_DIR"
   FH_THEME_SKIP_BACKGROUND=1 fh-theme-set tokyo-night
   ! (timeout 2 hyprlock 2>&1 | grep -q "Could not find config")'
+# lock screen shows the battery charge (icon + percent) via fh-battery-percent
+check grep -q 'cmd\[update:[0-9]*\] fh-battery-percent' /etc/skel/.config/hypr/hyprlock.conf
+check bash -c '
+  d=$(mktemp -d); mkdir -p "$d/BAT1"; echo Battery >"$d/BAT1/type"; echo 57 >"$d/BAT1/capacity"
+  echo Charging >"$d/BAT1/status"; [[ $(FH_POWER_SUPPLY=$d fh-battery-percent) == "󰂉 57%" ]] || exit 1
+  echo Discharging >"$d/BAT1/status"; [[ $(FH_POWER_SUPPLY=$d fh-battery-percent) == "󰁿 57%" ]] || exit 1
+  echo 100 >"$d/BAT1/capacity"; echo Full >"$d/BAT1/status"; [[ $(FH_POWER_SUPPLY=$d fh-battery-percent) == "󰂅 100%" ]] || exit 1
+  e=$(mktemp -d); [[ -z $(FH_POWER_SUPPLY=$e fh-battery-percent) ]]'
 # xdg-terminal-exec maps --app-id/--title/--dir onto alacritty flags via the skel desktop entry
 check bash -c '
   export HOME=$(mktemp -d); cp -r /etc/skel/. "$HOME"

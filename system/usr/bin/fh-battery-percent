@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# Prints "<icon> <percent>%" for the first battery (hyprlock's battery label); prints
+# nothing when there is none. Icons match Waybar's battery module.
+: "${FH_POWER_SUPPLY:=/sys/class/power_supply}"
+
+for bat in "$FH_POWER_SUPPLY"/BAT*; do
+  [[ -r $bat/capacity && $(cat "$bat/type" 2>/dev/null) == Battery ]] || continue
+  capacity=$(<"$bat/capacity")
+  status=$(cat "$bat/status" 2>/dev/null)
+  level=$(( capacity >= 100 ? 9 : capacity / 10 ))
+  charging=(󰢜 󰂆 󰂇 󰂈 󰢝 󰂉 󰢞 󰂊 󰂋 󰂅)
+  discharging=(󰁺 󰁻 󰁼 󰁽 󰁾 󰁿 󰂀 󰂁 󰂂 󰁹)
+  case $status in
+    Charging) icon=${charging[level]} ;;
+    Full) icon=󰂅 ;;
+    *) icon=${discharging[level]} ;;
+  esac
+  echo "$icon $capacity%"
+  exit 0
+done
