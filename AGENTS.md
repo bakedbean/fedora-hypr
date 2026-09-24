@@ -328,6 +328,8 @@ Containerfile (`registry.fedoraproject.org/fedora:44` + cargo; rustc 1.98 there,
 pinned by `ARG WSX_REF` (a commit of github.com/bakedbean/workspacex) — bump it to update wsx; waybar-docker
 is `cargo install`ed by version. Cargo registry and target dirs are `--mount=type=cache`d, so a rebuild
 after a bump is incremental (~2 min cold). The stage does not ship; only the two binaries are copied.
+`ngrok` (no RPM or COPR) comes from the `ngrok-fetch` stage: the `.deb` from ngrok's apt repo, pinned by
+`ARG NGROK_VERSION`/`NGROK_SHA256` and hash-checked, with only its static binary copied to `/usr/bin/ngrok`.
 If a COPR dies, alternatives with F44 builds: `sachesi/hyprland` (no uwsm). Check with
 `curl -s 'https://copr.fedorainfracloud.org/api_3/project?ownername=X&projectname=Y' | jq .chroot_repos`.
 A failed CI build is safe: the machine keeps its last good image.
