@@ -228,6 +228,8 @@ for b in psql pg_dump pg_dumpall pg_restore; do
   check bash -c "$b --version | grep -q '(PostgreSQL)'"
 done
 check bash -c '! rpm -q postgresql-server'
+# ngrok: pinned binary from the ngrok-fetch stage (Containerfile)
+check bash -c "ngrok version | grep -q '^ngrok version 3\\.'"
 
 # --- TUI launchers: Omarchy's stock "Docker"/"Disk Usage" app-launcher entries. Its
 # install/packaging/tuis.sh wrote them into ~/.local/share/applications at install time
