@@ -223,6 +223,11 @@ check grep -q 'exec-once = systemctl --user start podman.socket' /usr/share/fedo
 # `podman compose` itself fails under CI's rootful nested podman (passes rootless).
 check test -x /usr/libexec/docker/cli-plugins/docker-compose
 check bash -c '/usr/libexec/docker/cli-plugins/docker-compose version | grep -q "^Docker Compose version"'
+# postgres client tools only: no local server (databases run in containers)
+for b in psql pg_dump pg_dumpall pg_restore; do
+  check bash -c "$b --version | grep -q '(PostgreSQL)'"
+done
+check bash -c '! rpm -q postgresql-server'
 
 # --- TUI launchers: Omarchy's stock "Docker"/"Disk Usage" app-launcher entries. Its
 # install/packaging/tuis.sh wrote them into ~/.local/share/applications at install time

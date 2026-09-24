@@ -62,6 +62,8 @@ fastfetch
 ImageMagick
 podman-docker
 docker-compose
+# postgres client tools only (pg_dump/pg_restore/psql); servers run in containers
+postgresql
 # browsers + desktop apps
 chromium
 nautilus
