@@ -13,6 +13,7 @@ for b in Hyprland hyprlock hypridle hyprpicker hyprsunset uwsm \
          fcitx5 flatpak cc gcc g++ make strace; do
   check command -v "$b"
 done
+check aws --version
 check test -x /usr/libexec/hyprpolkitagent
 # magenta.nvim runs every sandboxed command as `strace -f -qq -e trace=file,... -o FILE -- bash -c CMD`
 # and parses the trace; existence is not enough, ptrace has to actually work.
