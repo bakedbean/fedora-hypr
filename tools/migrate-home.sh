@@ -7,7 +7,7 @@
 # Options:
 #   --dest DIR    mount root of an already-mounted target disk (instead of a block device)
 #   --src DIR     source home (default: $SUDO_USER's home, else $HOME)
-#   --user NAME   target user whose home under var/home/ is written (default: eben)
+#   --user NAME   target user whose home under var/home/ is written (default: user, the account fh-first-boot-user seeds)
 #   --no-split    do not look for the "# CCI configuration" .. PROD_READ_ONLY_DSN block in .zshrc
 #                 (only for a .zshrc without it; the secret-pattern guard still refuses obvious secrets)
 #   --dry-run     mount read-only, rsync -n, write nothing
@@ -41,7 +41,7 @@ set -euo pipefail
 
 usage() { sed -n '2,/^$/p' "$0" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
 
-DEV= DEST= SRC= DRY=0 NOSPLIT=0 TARGET_USER=eben
+DEV= DEST= SRC= DRY=0 NOSPLIT=0 TARGET_USER=user
 while [[ $# -gt 0 ]]; do
   case $1 in
     --dest) DEST=$2; shift 2 ;;

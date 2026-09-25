@@ -5,7 +5,7 @@
 # bootc does not ship /var, so anything under /var/home must be created here, not at build time.
 set -euo pipefail
 
-user="${FH_USER:-eben}"
+user="${FH_USER:-user}"
 home="/var/home/$user"
 
 install -d -m 0755 /var/home

@@ -341,7 +341,7 @@ A failed CI build is safe: the machine keeps its last good image.
   Hyprland eats SUPER, so inject keys through the monitor socket:
   `echo 'sendkey meta_l-spc' | socat - UNIX-CONNECT:vm/monitor.sock`
 - Serial console (login shell in the guest, from the host):
-  `socat -,raw,echo=0 UNIX-CONNECT:vm/serial.sock` — log in `eben`/`changeme`. If the shell
+  `socat -,raw,echo=0 UNIX-CONNECT:vm/serial.sock` — log in `user`/`changeme`. If the shell
   seems to swallow input, run `exec bash --norc` (interactive shells that probe terminal
   capabilities can stall over a dumb serial line). `vm/serial.log` keeps the kernel/systemd boot log.
 - Scripted probes from the host: `{ printf 'CMD\n'; sleep 6; } | socat - UNIX-CONNECT:vm/serial.sock`.

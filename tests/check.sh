@@ -91,6 +91,7 @@ check bash -c 'FH_USER=testuser fh-first-boot-user && id -nG testuser | grep -qw
 # password is NOT expired (tuigreet cannot run the PAM change conversation); a marker drives fh-setup-password instead
 check bash -c '! grep -q "chage" /usr/bin/fh-first-boot-user'
 check grep -q -- "--shell /usr/bin/zsh" /usr/bin/fh-first-boot-user
+check grep -qF '"${FH_USER:-user}"' /usr/bin/fh-first-boot-user   # generic default account name
 check test -x /usr/bin/fh-setup-password
 check test -f /var/home/testuser/.local/state/fedora-hypr/password-change-pending
 check test "$(stat -c %U /var/home/testuser/.local/state/fedora-hypr/password-change-pending)" = testuser
