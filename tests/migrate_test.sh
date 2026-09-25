@@ -13,7 +13,7 @@ tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 src=$tmp/src
 dest=$tmp/disk
-home=$dest/var/home/eben
+home=$dest/var/home/user
 mkdir -p "$src" "$home"
 
 # --- fabricated source home ---------------------------------------------------
@@ -244,7 +244,7 @@ check test -f "$home/RadioBar/linux/radiobar"
 check bash -c "! test -e '$home/RadioBar/build'"
 check bash -c "! test -e '$home/RadioBar/tools/__pycache__'"
 check test -L "$home/.local/bin/radiobar"
-check test "$(readlink "$home/.local/bin/radiobar")" = /home/eben/RadioBar/linux/radiobar
+check test "$(readlink "$home/.local/bin/radiobar")" = /home/user/RadioBar/linux/radiobar
 check test -f "$home/.local/share/fonts/f.ttf"
 # themes + backgrounds + wallpapers
 ft=$home/.config/fedora-hypr/themes/my-theme
@@ -342,7 +342,7 @@ check test -L "$home/.config/nvim"                                              
 check test "$(readlink "$home/.config/nvim")" = "$src/dotfiles/astronvim"          # ... with the same target
 check bash -c "! test -e '$src/dotfiles/astronvim/nvim'"                         # and nothing written through the link into the SOURCE
 check bash -c "! test -e '$home/dotfiles/astronvim/nvim'"
-check test "$(readlink "$home/.local/bin/radiobar")" = /home/eben/RadioBar/linux/radiobar
+check test "$(readlink "$home/.local/bin/radiobar")" = /home/user/RadioBar/linux/radiobar
 # a real directory already at .config/nvim is left alone with a warning (M-4), the run still succeeds
 rm "$home/.config/nvim"; mkdir "$home/.config/nvim"; echo keep > "$home/.config/nvim/keep"
 check run
@@ -364,7 +364,7 @@ declare -A ZRC=(
 refuse_case() {  # <name> [extra args]; asserts rc!=0 and target untouched
   local name=$1; shift
   local s=$tmp/src-$name d=$tmp/disk-$name
-  mkdir -p "$s/.config/hypr" "$d/var/home/eben"
+  mkdir -p "$s/.config/hypr" "$d/var/home/user"
   printf '%s\n' "${ZRC[$name]}" > "$s/.zshrc"; echo x > "$s/.zprofile"
   local snap; snap=$(find "$d" | sort)
   if env SUDO_USER=fakeuser HOME="$s" bash "$script" --dest "$d" "$@" >/dev/null 2>&1; then return 1; fi
@@ -375,41 +375,41 @@ check refuse_case noend
 check refuse_case leaked
 check refuse_case nosplit-secret --no-split
 # a theme with an un-rewritable omarchy reference refuses and leaves the target untouched
-bs=$tmp/src-badtheme; bd=$tmp/disk-badtheme; mkdir -p "$bs/.config/omarchy/themes/bad" "$bd/var/home/eben"
+bs=$tmp/src-badtheme; bd=$tmp/disk-badtheme; mkdir -p "$bs/.config/omarchy/themes/bad" "$bd/var/home/user"
 printf '# plain\n' > "$bs/.zshrc"; echo x > "$bs/.zprofile"
 printf 'exec = ~/.local/share/omarchy/bin/omarchy-theme-bg-next\n' > "$bs/.config/omarchy/themes/bad/hyprland.conf"
 snap=$(find "$bd" | sort | md5sum)
 check bash -c "! env SUDO_USER=fakeuser HOME='$bs' bash '$script' --dest '$bd' --no-split"
 check test "$snap" = "$(find "$bd" | sort | md5sum)"
 # the converter being absent is a warning, not a failure
-ms=$tmp/src-noconv; md=$tmp/disk-noconv; mkdir -p "$ms/.config/omarchy/themes/plain" "$md/var/home/eben"
+ms=$tmp/src-noconv; md=$tmp/disk-noconv; mkdir -p "$ms/.config/omarchy/themes/plain" "$md/var/home/user"
 printf '# plain\n' > "$ms/.zshrc"; printf 'x' > "$ms/.config/omarchy/themes/plain/alacritty.toml"
 check env SUDO_USER=fakeuser HOME="$ms" FH_COLORS_FROM_ALACRITTY=/nonexistent bash "$script" --dest "$md" --no-split
-check bash -c "! test -e '$md/var/home/eben/.config/fedora-hypr/themes/plain/colors.toml'"
+check bash -c "! test -e '$md/var/home/user/.config/fedora-hypr/themes/plain/colors.toml'"
 
 # --no-split with a clean .zshrc (no markers, no secrets) is accepted
-ns=$tmp/src-ok; nd=$tmp/disk-ok; mkdir -p "$ns" "$nd/var/home/eben"; printf '# plain\nalias l=ls\n' > "$ns/.zshrc"
+ns=$tmp/src-ok; nd=$tmp/disk-ok; mkdir -p "$ns" "$nd/var/home/user"; printf '# plain\nalias l=ls\n' > "$ns/.zshrc"
 check env SUDO_USER=fakeuser HOME="$ns" bash "$script" --dest "$nd" --no-split
-check grep -qx 'alias l=ls' "$nd/var/home/eben/.zshrc"
+check grep -qx 'alias l=ls' "$nd/var/home/user/.zshrc"
 
 # --- screensaver branding: migrated only when the user customised it away from Omarchy's
 # stock logo.txt; unchanged means the image's own HYPEDORA default (seeded by fh-first-run /
 # skel) should apply instead, so nothing is written.
 sb=$tmp/src-ssbrand; db=$tmp/disk-ssbrand
-mkdir -p "$sb/.config/omarchy/branding" "$sb/.local/share/omarchy" "$db/var/home/eben"
+mkdir -p "$sb/.config/omarchy/branding" "$sb/.local/share/omarchy" "$db/var/home/user"
 printf 'STOCK LOGO\n' > "$sb/.local/share/omarchy/logo.txt"
 printf 'MY CUSTOM LOGO\n' > "$sb/.config/omarchy/branding/screensaver.txt"
 ssbrand_out=$tmp/ssbrand-out.txt
 env SUDO_USER=fakeuser HOME="$sb" bash "$script" --dest "$db" > "$ssbrand_out" 2>&1; ssbrand_rc=$?
 check test "$ssbrand_rc" -eq 0
-check grep -qx 'MY CUSTOM LOGO' "$db/var/home/eben/.config/fedora-hypr/branding/screensaver.txt"
+check grep -qx 'MY CUSTOM LOGO' "$db/var/home/user/.config/fedora-hypr/branding/screensaver.txt"
 check grep -q 'branding/screensaver.txt (customised' "$ssbrand_out"
 
 sb2=$tmp/src-ssstock; db2=$tmp/disk-ssstock
-mkdir -p "$sb2/.config/omarchy/branding" "$sb2/.local/share/omarchy" "$db2/var/home/eben"
+mkdir -p "$sb2/.config/omarchy/branding" "$sb2/.local/share/omarchy" "$db2/var/home/user"
 printf 'STOCK LOGO\n' > "$sb2/.local/share/omarchy/logo.txt"
 printf 'STOCK LOGO\n' > "$sb2/.config/omarchy/branding/screensaver.txt"
 check env SUDO_USER=fakeuser HOME="$sb2" bash "$script" --dest "$db2"
-check bash -c "! test -e '$db2/var/home/eben/.config/fedora-hypr/branding/screensaver.txt'"
+check bash -c "! test -e '$db2/var/home/user/.config/fedora-hypr/branding/screensaver.txt'"
 
 exit $fail

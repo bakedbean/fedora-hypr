@@ -43,7 +43,7 @@ always tracks the base image's Fedora version (currently `44`).
 - Exposes a QEMU monitor on `vm/monitor.sock` and the guest serial console on `vm/serial.sock` (the
   install adds `console=ttyS0,115200 console=tty0` kargs, so a `serial-getty@ttyS0` login and the
   kernel/systemd boot log are on it). Serial console: `socat -,raw,echo=0 UNIX-CONNECT:vm/serial.sock`
-  (Ctrl-C to detach); `vm/serial.log` keeps a copy. Log in as `eben`/`changeme`.
+  (Ctrl-C to detach); `vm/serial.log` keeps a copy. Log in as `user`/`changeme`.
   Your host's Hyprland intercepts SUPER combos before QEMU sees them, so inject keys through the
   monitor instead, e.g. to open a terminal with SUPER+RETURN in the guest:
   ```
@@ -92,7 +92,7 @@ on pulls new layers of that image.
 
 ## First login
 
-The disk boots to tuigreet on tty1. Log in as `eben` with password `changeme`. Once Hyprland is up, a
+The disk boots to tuigreet on tty1. Log in as `user` with password `changeme`. Once Hyprland is up, a
 floating terminal prompts you to change it (`fh-setup-password`; also under Setup → Password in
 `fh-menu`) — the password is not expired at the PAM level because tuigreet cannot run the
 change-password conversation. SSH is disabled by default, so the window with the default password is
