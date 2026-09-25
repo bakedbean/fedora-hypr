@@ -50,6 +50,10 @@ check test "$(systemctl is-enabled sshd 2>/dev/null)" = disabled
 check test -f /usr/lib/systemd/system-preset/05-fedora-hypr.preset
 check grep -q '^disable sshd.service' /usr/lib/systemd/system-preset/05-fedora-hypr.preset
 check grep -q '^disable getty@tty1.service' /usr/lib/systemd/system-preset/05-fedora-hypr.preset
+# power key opens the system menu (Hyprland XF86PowerOff bind), not an instant logind poweroff;
+# the last HandlePowerKey in the merged config wins, so no later drop-in may override ours
+check bash -c 'systemd-analyze cat-config systemd/logind.conf | grep -E "^HandlePowerKey=" | tail -1 | grep -qx HandlePowerKey=ignore'
+check grep -qE '^bindld = , XF86PowerOff, .*fh-menu system' /usr/share/fedora-hypr/default/hypr/bindings/utilities.conf
 # systemd-gpt-auto-generator's boot.automount (ESP automount, 120s idle timeout) wraps ostree's /boot bind
 # mount; once it idles out and re-triggers, the mount is torn down at shutdown before ostree-finalize-staged
 # runs ("Remounting /boot read-write: Invalid argument") and staged bootc upgrades are silently dropped

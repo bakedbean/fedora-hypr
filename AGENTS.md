@@ -44,6 +44,7 @@ system/                    copied verbatim onto / in the image
   etc/greetd/config.toml   tuigreet → uwsm start -e -D Hyprland hyprland.desktop (RPM-owned session)
   usr/lib/systemd/system/  fh-first-boot-user.service, fh-first-boot-flatpaks.service, boot.automount -> /dev/null (see "Things that already bit us")
   usr/lib/systemd/system-preset/05-fedora-hypr.preset   disable sshd + getty@tty1 (survives first-boot preset-all)
+  usr/lib/systemd/logind.conf.d/10-fedora-hypr.conf   HandlePowerKey=ignore so Hyprland's XF86PowerOff bind opens fh-menu system
   usr/share/plymouth/themes/hypedora/   boot splash (script-module Plymouth theme, HYPEDORA wordmark); selected by etc/plymouth/plymouthd.conf
   usr/lib/bootc/kargs.d/10-fedora-hypr.toml   kernel args "quiet splash" (bootc applies at install, reconciles on upgrade)
   usr/share/glib-2.0/schemas/10-fedora-hypr.gschema.override   system-wide GSettings defaults (Nautilus/GTK show hidden files); compiled in 20-services.sh
