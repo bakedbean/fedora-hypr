@@ -237,14 +237,14 @@ from the registry's (via `skopeo inspect`), else prints nothing and exits 1 so W
 module; results are cached under `${XDG_RUNTIME_DIR:-/tmp}/fh-update-available` for 10 minutes.
 Clicking it runs `fh-update` (= `bootc upgrade` + flatpak update) in a floating terminal, which
 clears the cache and signals Waybar to refresh. `bootc status` requires root, so
-`system/etc/sudoers.d/fh-update-available` grants `%wheel` passwordless sudo for exactly one
+`system/etc/sudoers.d/zz-fh-update-available` grants `%wheel` passwordless sudo for exactly one
 command line — `/usr/sbin/bootc status --format json`, no arguments allowed to vary — and
 `fh-update-available` calls `sudo -n` that exact command (`-n` so it never hangs on a password
 prompt if the rule is somehow missing). It's scoped this tightly (one absolute binary path, one
 fixed argument list, read-only subcommand) so the access granted is exactly "read bootc status
 unprivileged", nothing else `bootc`/`sudo` can do. Any failure (rule missing, offline, skopeo
 digest mismatch check failing) is treated as "up to date" — the indicator never shows a false
-positive.
+positive. The `zz-` prefix is load-bearing: see "Things that already bit us".
 
 If CI is ever still too slow for a one-package turnaround, the machine can build it itself: a
 cached `make build` here is ~4 s and a full package-layer rebuild ~2m54s. `sudo podman build`
@@ -417,6 +417,17 @@ A failed CI build is safe: the machine keeps its last good image.
   asserts the promoted tag's digest equals the self-checked one, so a regression fails the job
   rather than shipping. Found in review, not by four green CI runs, because those runs skipped
   the publish step entirely — which is why branch runs now exercise it onto a throwaway tag.
+- **sudo applies the *last* matching sudoers rule, so a NOPASSWD drop-in must sort last.** The update
+  indicator was shipped as `sudoers.d/fh-update-available`, which sorts before `sudoers.d/wheel`
+  (`%wheel ALL=(ALL) ALL`); `wheel` won, `sudo -n` demanded a password, `fh-update-available` failed
+  closed, and the Waybar module never appeared on the machine from the day it shipped, every check green,
+  because the checks only ran `visudo -c` and grepped the file. Now `zz-fh-update-available`, and
+  `tests/check.sh` runs the real command as a wheel user. Don't probe with `sudo -n -l`: sudo's
+  `listpw=any` default skips the password whenever *any* entry is NOPASSWD, so it passes either way.
+  On upgrade, bootc's `/etc` 3-way merge removes an unmodified old `fh-update-available` and adds the
+  new file; a locally edited old copy survives beside it, harmlessly (it still sorts before `wheel`).
+  But a local deletion or edit of the *old* name does not carry over to the new one, so anyone who
+  deliberately disabled the grant has to disable `zz-fh-update-available` again.
 - **dockerd cannot unpack this image: overlay2 caps a container at 127 layers.** `base-main` alone
   brings it to ~270, and `docker run` fails with `failed to register layer: max depth exceeded`.
   BuildKit builds and pushes it regardless and ostree does not stack layers at all, so this is a
