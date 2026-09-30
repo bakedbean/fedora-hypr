@@ -424,6 +424,10 @@ A failed CI build is safe: the machine keeps its last good image.
   because the checks only ran `visudo -c` and grepped the file. Now `zz-fh-update-available`, and
   `tests/check.sh` runs the real command as a wheel user. Don't probe with `sudo -n -l`: sudo's
   `listpw=any` default skips the password whenever *any* entry is NOPASSWD, so it passes either way.
+  On upgrade, bootc's `/etc` 3-way merge removes an unmodified old `fh-update-available` and adds the
+  new file; a locally edited old copy survives beside it, harmlessly (it still sorts before `wheel`).
+  But a local deletion or edit of the *old* name does not carry over to the new one, so anyone who
+  deliberately disabled the grant has to disable `zz-fh-update-available` again.
 - **dockerd cannot unpack this image: overlay2 caps a container at 127 layers.** `base-main` alone
   brings it to ~270, and `docker run` fails with `failed to register layer: max depth exceeded`.
   BuildKit builds and pushes it regardless and ostree does not stack layers at all, so this is a
