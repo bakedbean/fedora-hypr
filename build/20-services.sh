@@ -25,7 +25,7 @@ rm -rf /var/lib/authselect
 systemctl enable fh-first-boot-user.service
 systemctl enable fh-first-boot-flatpaks.service
 chmod 0440 /etc/sudoers.d/wheel
-chmod 0440 /etc/sudoers.d/fh-update-available
+chmod 0440 /etc/sudoers.d/zz-fh-update-available
 
 # --- GSettings defaults (system/usr/share/glib-2.0/schemas/*.gschema.override): compile them
 # into gschemas.compiled so Nautilus/GTK pick them up without any per-user step.
