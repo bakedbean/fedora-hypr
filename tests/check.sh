@@ -274,9 +274,13 @@ check test "$(stat -c %a /etc/sudoers.d/zz-fh-update-available)" = 440
 check grep -qF '/usr/sbin/bootc status --format json' /etc/sudoers.d/zz-fh-update-available
 # behavioral: sudo applies the LAST matching rule, so a later %wheel ALL rule (sudoers.d/wheel)
 # silently overrides NOPASSWD. Run the real command as a wheel user (not sudo -l: listpw=any skips
-# the password whenever any entry is NOPASSWD); bootc may fail here, sudo must not refuse it
-check bash -c '! runuser -u testuser -- sudo -n /usr/sbin/bootc status --format json 2>&1 >/dev/null | grep -q "password is required"'
-check bash -c 'runuser -u testuser -- sudo -n /usr/sbin/bootc status 2>&1 >/dev/null | grep -q "password is required"'
+# the password whenever any entry is NOPASSWD) and require bootc's JSON, not merely "sudo didn't say
+# password": a missing binary would pass that. bootc status answers even in this container. LC_ALL=C
+# pins sudo's messages to English for the negative matches.
+check bash -c 'runuser -u testuser -- env LC_ALL=C sudo -n /usr/sbin/bootc status --format json | jq -e ".kind == \"BootcHost\"" >/dev/null'
+check bash -c 'runuser -u testuser -- env LC_ALL=C sudo -n /usr/sbin/bootc status 2>&1 >/dev/null | grep -q "password is required"'
+# and only wheel: a user outside it gets nothing from the rule
+check bash -c 'runuser -u nobody -- env LC_ALL=C sudo -n /usr/sbin/bootc status --format json 2>&1 >/dev/null | grep -q "password is required"'
 
 # --- GRUB drop-in (gfxterm + hidden menu)
 check test -f /usr/lib/bootupd/grub2-static/configs.d/05_terminal.cfg
