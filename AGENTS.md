@@ -190,10 +190,14 @@ Migration of existing accounts (`fh-migrate-hypr-lua`, run by `fh-migrate-hypr-l
    never collide with a user file), so precedence is unchanged. Values are typed from
    `/usr/share/hypr/stubs/hl.meta.lua`. It verifies in a staging HOME (the theme is a *copy* there);
    each line Hyprland rejects becomes a `-- FIXME(conf2lua): …` comment and it verifies again until the
-   config loads. Untranslatable lines (unknown dispatchers, `exec =`, `windowrulev2`, and everything
-   inside a `submap` until `submap = reset`, so no submap bind turns global) are FIXME comments from the
-   start. The report and the modules are written first, `hyprland.lua` last, and an install error
-   before that switch undoes the rest;
+   config loads. Untranslatable lines (unknown dispatchers, `exec =`, and everything inside a `submap`
+   until `submap = reset`, so no submap bind turns global) are FIXME comments from the start. Old-syntax
+   rules (`windowrulev2`, and `windowrule` without `match:`) are translated only when every effect and
+   prop has a known Lua twin (`V2_EFFECTS`/`V2_MATCH_PROPS`), else the whole line is a FIXME: `convert`
+   (fh-theme-set, migrate-home) never verifies, so it must not emit a guess. Old plain `center` centred
+   on the whole monitor, Lua's `center` uses the work area; it is translated with a trailing comment.
+   The report and the modules are written first, `hyprland.lua` last, and an install error before that
+   switch undoes the rest;
 4. the `.conf` files stay where they are (Hyprland ignores them once hyprland.lua exists) and are
    copied, with the old toggles, to `~/.config/hypr/legacy-conf-<stamp>/`; the report
    (`~/.local/state/fedora-hypr/hypr-lua-migration.report`) lists what to review and `fh-first-run`

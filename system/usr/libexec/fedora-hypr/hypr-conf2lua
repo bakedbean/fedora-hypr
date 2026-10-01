@@ -227,7 +227,8 @@ def typed_literal(raw, typ):
 
 def rule_literal(raw):
     """Window/layer rule effect value: Lua wants bools for on/off, numbers for
-    single numbers and strings for everything else ("0.9 0.8", "875 600")."""
+    single numbers and strings for everything else ("0.9 0.8", "875 600"),
+    colours included ("0xffeb6f92" is a colour, not the number it spells)."""
     raw = raw.strip()
     lower = raw.lower()
     if raw == "" or lower in ("on", "true", "yes"):
@@ -476,31 +477,54 @@ class Converter:
         return f"{call}({lua_table([('match', lua_table(match))] + effects)})"
 
     def window_rule_v2(self, value, original):
-        """windowrulev2 (and windowrule before 0.53): `effect args, prop:value, ...`.
-        Only names with a known Lua twin are translated: `convert` (fh-theme-set,
-        migrate-home) does not verify its output."""
-        items = []
-        for piece in value.split(","):
-            # a comma inside a regex (title:^(a, b)$) or a colour (rgba(1,2,3,1))
-            # belongs to the item before it
-            if items and not re.match(r"^[A-Za-z]+:", piece.strip()):
-                items[-1] += "," + piece
+        """windowrulev2 (and windowrule before 0.53): `effect args[, effect args...],
+        prop:value, ...`. Only names with a known Lua twin are translated, and a
+        line with any unknown effect or prop is a FIXME as a whole: `convert`
+        (fh-theme-set, migrate-home) does not verify its output. Not handled:
+        onworkspace/fullscreenstate/modal matches, the pre-0.48 `rule, regex` form."""
+        pieces = value.split(",")
+        prop_like = re.compile(r"^[A-Za-z]+:")
+        split = next((i for i, p in enumerate(pieces) if prop_like.match(p.strip())), len(pieces))
+        # effects come first; a comma inside parentheses (rgba(1,2,3,1)) is part of a value
+        effects_raw, depth = [""], 0
+        for char in ",".join(pieces[:split]):
+            depth += {"(": 1, ")": -1}.get(char, 0)
+            if char == "," and depth <= 0:
+                effects_raw.append("")
             else:
-                items.append(piece)
-        items = [item.strip() for item in items]
-        if len(items) < 2 or not items[0]:
-            return self.fixme("rule needs an effect and at least one prop:value (or the pre-0.48 `rule, regex` form)", original)
-        name, _, val = items[0].partition(" ")
-        name = name.lower()
-        if name in V2_FLAG_EFFECTS and not val.strip():
-            effect, val = V2_FLAG_EFFECTS[name]
-        else:
-            effect = V2_EFFECTS.get(name, name if name in V2_PLAIN_EFFECTS else None)
-        if effect is None:
-            return self.fixme(f"unknown windowrulev2 effect '{name}'", original)
+                effects_raw[-1] += char
+        # props; a comma inside a regex (title:^(a, b)$) belongs to the prop before it
+        props = []
+        for piece in pieces[split:]:
+            if props and not prop_like.match(piece.strip()):
+                props[-1] += "," + piece
+            else:
+                props.append(piece)
+        effects_raw = [e.strip() for e in effects_raw]
+        if not all(effects_raw) or not props:
+            return self.fixme("rule needs effects and at least one prop:value (or the pre-0.48 `rule, regex` form)", original)
+        effects, note = [], None
+        for raw in effects_raw:
+            name, _, val = raw.partition(" ")
+            name, val = name.lower(), val.strip()
+            if name == "center" and val in ("", "0", "1"):
+                # Lua's center uses the work area, like the old `center 1`; plain/`center 0`
+                # used the whole monitor, so the window may sit half a bar lower/higher
+                effect, val = "center", ""
+                if raw.partition(" ")[2].strip() != "1":
+                    note = "conf2lua: centred in the work area, was the whole monitor"
+            elif name in V2_FLAG_EFFECTS and not val:
+                effect, val = V2_FLAG_EFFECTS[name]
+            else:
+                effect = V2_EFFECTS.get(name, name if name in V2_PLAIN_EFFECTS else None)
+            if effect is None:
+                return self.fixme(f"unknown windowrulev2 effect '{name}'", original)
+            if any(effect == e for e, _ in effects):
+                return self.fixme(f"effect '{name}' given twice", original)
+            effects.append((effect, rule_literal(val)))
         match = []
-        for item in items[1:]:
-            prop, _, mval = item.partition(":")
+        for item in props:
+            prop, _, mval = item.strip().partition(":")
             key = V2_MATCH_PROPS.get(prop.lower())
             if key is None:
                 return self.fixme(f"unknown windowrulev2 prop '{prop}'", original)
@@ -510,7 +534,8 @@ class Converter:
             else:
                 literal = lua_str(mval)
             match.append((key, literal))
-        return f"hl.window_rule({lua_table([('match', lua_table(match)), (effect, rule_literal(val))])})"
+        rule = f"hl.window_rule({lua_table([('match', lua_table(match))] + effects)})"
+        return rule + (f"  -- {note}" if note else "")
 
     def monitor(self, value, original):
         fields = split_args(value, 0)
@@ -691,7 +716,7 @@ class Converter:
             return f"hl.env({lua_str(name.strip())}, {lua_str(val.strip())})"
         if k == "monitor":
             return self.monitor(value, line)
-        if k == "windowrulev2" or (k == "windowrule" and "match:" not in value):
+        if k == "windowrulev2" or (k == "windowrule" and not re.search(r"(^|,)\s*match:", value)):
             return self.window_rule_v2(value, line)
         if k == "windowrule":
             return self.window_rule(value, line)
