@@ -110,6 +110,24 @@ up; it retries every minute until every app is present. Watch it with
 shells and desktop services. Override them in your shell config or
 `~/.config/environment.d/90-editor.conf` for desktop services.
 
+**Hyprland config:** Lua. `~/.config/hypr/hyprland.lua` loads the image defaults from
+`/usr/share/fedora-hypr/default/hypr`, then your overrides: `monitors.lua`, `input.lua`,
+`bindings.lua`, `envs.lua`, `looknfeel.lua`, `autostart.lua` (all yours to edit). Add a binding with
+`fh.bind("SUPER + SHIFT + R", "My thing", "my-command")`; change a default one by
+`hl.unbind("SUPER + SPACE")` first. `SUPER + K` lists every binding. After editing,
+`hyprctl reload`; `hyprctl configerrors` names any line Hyprland rejected (a Lua error in one override
+file skips that file, not the session). Syntax reference: https://wiki.hypr.land/Configuring/Start/
+(`.luarc.json` points a Lua language server at Hyprland's API stubs).
+
+**Accounts from before the Lua config** (their `~/.config/hypr` has `hyprland.conf`) are migrated once,
+automatically, before the first session after the update: your `.conf` overrides are converted to the
+`.lua` files above and checked with Hyprland's own verifier; anything that couldn't be converted is
+left as a `-- FIXME(conf2lua)` comment and listed in a notification (details in
+`~/.local/state/fedora-hypr/hypr-lua-migration.report.shown`). The `.conf` files stay in place and are
+also copied to `~/.config/hypr/legacy-conf-<date>/`. If you `bootc rollback` to an image from before
+the change, `hyprland.lua` steps aside on its own (renamed `hyprland.lua.rolled-back`) and the next
+login uses the old `hyprland.conf` again.
+
 ## Day 2
 
 - A Waybar icon (`custom/update`, `fh-update-available`) appears in the bar when an update is
@@ -159,24 +177,26 @@ fedora-hypr/
 ├── system/                     # copied verbatim onto / in the image (COPY system/ /)
 │   ├── usr/bin/fh-*             # helper scripts (theming, launchers, toggles, first-boot, update, …)
 │   ├── usr/share/fedora-hypr/
-│   │   ├── default/               # canonical hypr/waybar/mako/swayosd/hyprlock/hypridle configs
+│   │   ├── default/               # canonical configs: hypr/ (Lua), waybar, mako, swayosd, alacritty
 │   │   ├── themed/                # theme-parameterized templates (*.tpl)
 │   │   ├── themes/<name>/         # ported theme color definitions
 │   │   ├── flatpaks.txt           # Flatpaks installed by fh-first-boot-flatpaks
 │   │   └── icons/                 # icons for the stock TUI launcher entries (Docker, Disk Usage)
 │   ├── usr/lib/systemd/system/    # fh-first-boot-user.service, fh-first-boot-flatpaks.service
+│   ├── usr/lib/systemd/user/      # fh-migrate-hypr-lua.service (one-time .conf → Lua, before the session)
+│   ├── usr/libexec/fedora-hypr/   # hypr-conf2lua (the .conf → Lua converter behind it)
 │   ├── usr/lib/tmpfiles.d/        # /var/cache/tuigreet
 │   ├── usr/lib/systemd/system-preset/ # keep sshd/getty@tty1 disabled through first-boot preset-all
 │   ├── usr/lib/bootc/kargs.d/     # quiet splash
 │   ├── usr/share/plymouth/themes/hypedora/  # boot splash (HYPEDORA logo; tools/gen-plymouth-logo.py)
 │   └── etc/
-│       ├── skel/.config/          # thin per-user config seeded on first login, sources the defaults
+│       ├── skel/.config/          # thin per-user config seeded on first login; hypr/hyprland.lua loads the defaults
 │       │                            # (hypridle.conf / hyprlock.conf live here: both only search ~/.config/hypr)
 │       ├── skel/.local/share/applications/  # Alacritty.desktop (xdg-terminal-exec keys), Docker + Disk Usage TUI launchers
 │       ├── greetd/config.toml     # tuigreet → uwsm start -e -D Hyprland hyprland.desktop (RPM-owned session)
 │       ├── plymouth/plymouthd.conf # Theme=hypedora
 │       └── ...                    # NetworkManager, environment.d, sudoers.d, profile.d
-├── tests/                       # check.sh (in-image self-check) + scripts_test.sh, theme_test.sh, binds_test.sh
+├── tests/                       # check.sh (in-image self-check) + scripts_test.sh, theme_test.sh, binds_test.sh, hypr_lua_test.sh
 ├── tools/                       # migrate-home.sh (existing home → drive), gen-plymouth-logo.py (HYPEDORA wordmark)
 ├── vm.sh                        # install-to-raw-disk + QEMU boot for local smoke testing
 ├── Makefile                     # build / shell / check / push / vm targets

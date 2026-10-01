@@ -18,7 +18,7 @@ check test -x /usr/libexec/hyprpolkitagent
 # magenta.nvim runs every sandboxed command as `strace -f -qq -e trace=file,... -o FILE -- bash -c CMD`
 # and parses the trace; existence is not enough, ptrace has to actually work.
 check bash -c 't=$(mktemp); strace -f -qq -e trace=file,network,process -e signal=none -o "$t" -- bash -c "cat /etc/os-release >/dev/null" && grep -q "openat(" "$t"'
-# pinned to 0.56.x: 0.57 drops .conf/hyprlang support (AGENTS.md, Lua config migration)
+# pinned to 0.56.x until installed accounts have migrated to Lua (AGENTS.md, "Hyprland config (Lua)")
 check bash -c "rpm -q hyprland | grep -q '^hyprland-0.56'"
 check rpm -q fprintd
 check command -v chromium-browser

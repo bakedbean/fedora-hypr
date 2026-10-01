@@ -31,24 +31,31 @@ system/                    copied verbatim onto / in the image
   etc/environment.d/50-fedora-hypr.conf  FH_PATH only (environment.d cannot expand $HOME/${XDG_RUNTIME_DIR})
   usr/share/uwsm/env       session env sourced by uwsm's sh preloader: ~/.local/bin on PATH, DOCKER_HOST (podman socket)
   usr/share/fedora-hypr/
-    default/hypr/          canonical Hyprland config (autostart, bindings/, apps/, toggles/, envs, looknfeel…)
+    default/hypr/          canonical Hyprland config, Lua (defaults.lua → autostart, bindings/, apps/, envs, looknfeel…;
+                           toggles.lua + toggles/; bootstrap/paths/helpers/require_*); see "Hyprland config (Lua)"
     default/{waybar,mako,swayosd,alacritty}/  canonical app configs (alacritty/ only has screensaver.toml so far)
-    themed/*.tpl           theme templates rendered by fh-theme-set-templates
+    themed/*.tpl           theme templates rendered by fh-theme-set-templates (*.lua.tpl get Lua-escaped values)
     themes/<name>/         19 themes: colors.toml, backgrounds/, btop.theme, [light.mode]
     flatpaks.txt           installed by fh-first-boot-flatpaks
     logo.txt               HYPEDORA half-block wordmark tte animates for the screensaver (see "Screensaver")
     icons/                 PNGs for the stock TUI launcher entries (Icon= needs an absolute path; skel can't know $HOME)
-  etc/skel/                per-user seed; hyprland.conf sources the defaults then user overrides;
+  etc/skel/                per-user seed; .config/hypr/hyprland.lua loads the defaults, then the user's override
+                           modules (monitors/input/bindings/envs/looknfeel/autostart.lua), then the toggles;
                            .local/share/applications/{Docker,Disk Usage}.desktop = Omarchy's stock TUI launcher
                            entries (its tuis.sh wrote them at install time); fh-tui-install/-remove add more
   etc/greetd/config.toml   tuigreet → uwsm start -e -D Hyprland hyprland.desktop (RPM-owned session)
   usr/lib/systemd/system/  fh-first-boot-user.service, fh-first-boot-flatpaks.service, boot.automount -> /dev/null (see "Things that already bit us")
+  usr/lib/systemd/user/    fh-migrate-hypr-lua.service (one-time .conf → Lua move, before the compositor; static .wants symlink)
+  usr/libexec/fedora-hypr/hypr-conf2lua   Python: .conf → Lua converter + verified migration (see "Hyprland config (Lua)")
   usr/lib/systemd/system-preset/05-fedora-hypr.preset   disable sshd + getty@tty1 (survives first-boot preset-all)
   usr/lib/systemd/logind.conf.d/10-fedora-hypr.conf   HandlePowerKey=ignore so Hyprland's XF86PowerOff bind opens fh-menu system
   usr/share/plymouth/themes/hypedora/   boot splash (script-module Plymouth theme, HYPEDORA wordmark); selected by etc/plymouth/plymouthd.conf
   usr/lib/bootc/kargs.d/10-fedora-hypr.toml   kernel args "quiet splash" (bootc applies at install, reconciles on upgrade)
   usr/share/glib-2.0/schemas/10-fedora-hypr.gschema.override   system-wide GSettings defaults (Nautilus/GTK show hidden files); compiled in 20-services.sh
-tests/check.sh             in-image self-check (~170 checks); runs theme_test.sh, scripts_test.sh, binds_test.sh
+tests/check.sh             in-image self-check (~360 checks); runs theme_test.sh, scripts_test.sh, binds_test.sh, hypr_lua_test.sh
+tests/hypr_lua_test.sh     loads the Lua config with Hyprland's verifier (every theme, every toggle), rollback guard, and
+                           migrates tests/fixtures/legacy-hypr (an old .conf account) end to end
+tests/hypr_binds.lua       evaluates hyprland.lua against a recording `hl` stub; binds_test.sh reads its output
 tests/migrate_test.sh      HOST-side test of tools/migrate-home.sh on a fabricated home (make test-migrate)
 tools/migrate-home.sh      copies the author's old home onto a target drive (see "Migrating a home")
 tools/bump-base.sh         re-pins the Containerfile FROM digests (weekly CI run commits the result; `make bump-base` locally)
@@ -121,12 +128,75 @@ Fedora release bump = change the `FROM` tag (`TAG` is derived from it everywhere
   Stock ones ship in skel; users add their own with `fh-tui-install`. An existing account that predates
   them gets Docker with `fh-tui-install Docker lazydocker tile /usr/share/fedora-hypr/icons/Docker.png`.
 - App launchers are bound on **SUPER SHIFT** (SUPER+letter collides with tiling binds in
-  `default/hypr/bindings/tiling-v2.conf`; `tests/binds_test.sh` fails on duplicates).
+  `default/hypr/bindings/tiling-v2.lua`; `tests/binds_test.sh` fails on duplicates and on a new skel
+  app bind on plain SUPER + letter).
+- Ported Lua files carry `-- Adapted from third-party MIT-licensed code; see LICENSE-THIRD-PARTY in the source repo`
+  on line 2 (line 1 says what the file is). Binds go through `fh.bind(keys, description, cmd-or-dispatcher[, opts])`
+  (a string is a shell command); keys are `"SUPER + SHIFT + B"`; the comma key is `comma` (lower case).
+- Scripts talking to Hyprland use the Lua form first and the legacy one as fallback, e.g.
+  `hyprctl dispatch 'hl.dsp.focus({ workspace = "1" })' >/dev/null 2>&1 || hyprctl dispatch workspace 1`,
+  and `hyprctl eval 'hl.config(...)'` before `hyprctl keyword`: under a Lua config the legacy forms are
+  rejected, the fallback covers a legacy session (rollback). Interpolate only names you control or quote them
+  as a Lua string (`lua_quote` in `fh-toggle-touchpad`).
+- Toggles: `fh-hyprland-toggle <name>` copies `default/hypr/toggles/<name>.lua` into
+  `~/.local/state/fedora-hypr/toggles/hypr/`. A toggle that carries a hardware name (touchpad, internal
+  monitor, mirroring) writes it as plain text to `<toggle>.name`, which `default/hypr/toggles.lua` reads:
+  device/monitor names never become Lua code.
 - Nothing is written under `/var` or `/usr/local` at build time (lint must stay at 0 warnings).
   Runtime state dirs come from `tmpfiles.d`, `StateDirectory=`, or the first-boot scripts.
 - Anything the image can't do at build time (users, `/var/home`, Flatpaks) happens in the
   first-boot units. `fh-first-boot-user` is a fast `oneshot` ordered `Before=greetd.service`;
   `fh-first-boot-flatpaks` is `Type=simple` so it **never** gates `graphical.target`.
+
+## Hyprland config (Lua)
+
+Hyprland 0.56 deprecates hyprlang and shows a 15 s ".conf config format … removed in 0.57" notice on
+every login whenever the config is legacy (`CCompositor::performUserChecks`, unconditional on
+`CONFIG_LEGACY`; no option silences it); 0.57 drops the format. The config is Lua, re-ported from
+upstream v4.0.4's layout with fedora-hypr's own content (our binds, rules, opacities, blur, autostart).
+Hyprland is **still pinned to 0.56.x** (`build/packages/copr.txt`): unpin only once installed accounts
+have been through the migration below, since 0.56 is the release that reads both formats.
+
+Loading: `~/.config/hypr/hyprland.lua` (skel) `dofile`s `$FH_PATH/default/hypr/bootstrap.lua`, which puts
+`~/.config/?.lua` and `$FH_PATH/?.lua` on `package.path` and drops cached modules so `hyprctl reload`
+re-reads them; then `require("default.hypr.defaults")` (helpers → autostart → bindings → envs →
+looknfeel → input → windows → apps/* → the theme's `fedora-hypr.current.theme.hyprland`), the user's
+modules (`user("hypr.bindings")` …), and `default.hypr.toggles`. Two guards in skel's hyprland.lua:
+- each user module loads through `pcall`, so a Lua error in one is reported (Hyprland's notification,
+  and `hyprctl configerrors`, which names it even under pcall) and the defaults' binds survive.
+  `FH_VERIFY_STRICT=1` turns the pcall off so verification sees every error;
+- **rollback guard**: if `$FH_PATH/default/hypr/bootstrap.lua` is missing (a `bootc rollback` to an image
+  from before this), hyprland.lua renames itself to `hyprland.lua.rolled-back`, binds SUPER+RETURN /
+  SUPER+ESCAPE and says to log out; the next login loads the untouched old `hyprland.conf`. After
+  upgrading again, delete the `.rolled-back` file (or rename it back).
+
+Verification: `Hyprland --verify-config -c ~/.config/hypr/hyprland.lua` loads the whole thing headless
+(not as root; `XDG_RUNTIME_DIR` must be set), prints `file:line: message` per problem and exits 1. It
+runs top-level `hl.exec_cmd()` and `config.reloaded` handlers, so anything that launches a program goes
+in `hl.on("hyprland.start", …)` (what `fh.exec_on_start` does). To see a real session, nest one in the
+running desktop (a small window appears for a few seconds):
+`podman run --rm --userns=keep-id --user 1000 --device /dev/dri -v $XDG_RUNTIME_DIR/$WAYLAND_DISPLAY:/wl/wayland-1
+--security-opt label=disable localhost/fedora-hypr:44 bash -c 'export XDG_RUNTIME_DIR=/tmp/rt WAYLAND_DISPLAY=/wl/wayland-1; mkdir -m700 $XDG_RUNTIME_DIR; HOME=… Hyprland'`
+then `hyprctl binds`, `hyprctl configerrors`, `hyprctl eval '…'` against it.
+
+Migration of existing accounts (`fh-migrate-hypr-lua`, run by `fh-migrate-hypr-lua.service` ordered
+`Before=graphical-session-pre.target` — uwsm's `wayland-wm@` starts after that target — when
+`~/.config/hypr/hyprland.conf` exists and `hyprland.lua` doesn't; safe to run by hand):
+1. toggles: `<flag>.conf` → its `.lua` twin; touchpad/monitor ones → `.name` data files;
+2. the current theme gets `hyprland.lua`/`gum-env.lua` rendered from its `colors.toml`;
+3. `hypr-conf2lua migrate` walks `hyprland.conf` in order (variables carry across files, as in hyprlang),
+   converts each sourced `~/.config/hypr/*.conf` into a module of the same name (statements written
+   straight in hyprland.conf go to `custom.lua`), types values from `/usr/share/hypr/stubs/hl.meta.lua`,
+   and verifies the result in a staging HOME; each line Hyprland rejects becomes a
+   `-- FIXME(conf2lua): …` comment and it verifies again until the config loads. Untranslatable lines
+   (unknown dispatchers, `exec =`, `windowrulev2`, …) are FIXME comments from the start. Nothing is
+   installed unless the defaults themselves verify; `hyprland.lua` is written last;
+4. the `.conf` files stay where they are (Hyprland ignores them once hyprland.lua exists) and are
+   copied, with the old toggles, to `~/.config/hypr/legacy-conf-<stamp>/`; the report
+   (`~/.local/state/fedora-hypr/hypr-lua-migration.report`) lists what to review and `fh-first-run`
+   shows it once as a notification.
+Re-running after a failure is safe; a failed run changes nothing. `tools/migrate-home.sh` uses the same
+converter (`hypr-conf2lua convert`) without verification (it runs on the old host).
 
 ## Updates
 
@@ -299,8 +369,8 @@ that was never ported as `fh-transcode-ascii`, so it was dropped). `fh-system-lo
 running screensaver (`pkill -f org.fedorahypr.screensaver`) so it never fights the lock screen, and
 hypridle's skel config starts the screensaver at the upstream 150s timeout before locking at 152s
 (screensaver activity resets hypridle's own idle timer, hence "half + 2s margin" rather than
-150+300). The window rule lives in its own `default/hypr/apps/screensaver.conf` (fullscreen, float,
-slide animation), sourced from `apps.conf`.
+150+300). The window rule lives in its own `default/hypr/apps/screensaver.lua` (fullscreen, float,
+slide animation), loaded with the rest of `apps/` by `apps.lua`.
 
 `system/usr/share/fedora-hypr/logo.txt` is the HYPEDORA wordmark `tte` animates — half-block ASCII
 (`█`/`▀`/`▄`/` `, two pixel-grid rows per text line), generated by `tools/gen-screensaver-logo.py`,
@@ -364,7 +434,7 @@ A failed CI build is safe: the machine keeps its last good image.
 - hypridle/hyprlock only look in `~/.config/hypr` (and XDG dirs), not our `default/` tree.
 - QEMU adds a default VGA device unless `-vga none`; with two GPUs Hyprland renders on the one
   the window doesn't show. Black screen + captured keyboard = compositor running, look at outputs.
-- Walker 2.x needs the `elephant` daemon; both are started from `autostart.conf`.
+- Walker 2.x needs the `elephant` daemon; both are started from `autostart.lua`.
 - `xdg-terminal-exec` needs `X-TerminalArg*` keys in the terminal's `.desktop` (shipped in skel).
 - `pkill <name>` can match the calling `fh-restart-<name>` script; use `pkill -x`.
 - The theme engine builds a sed script from `colors.toml`; values are escaped for `\ | &`
@@ -441,13 +511,31 @@ A failed CI build is safe: the machine keeps its last good image.
   magenta.nvim's Linux sandbox down with it. Anything that must stay goes in
   `build/packages/fedora.txt` and ships in the image; layering is only ever a throwaway experiment.
 
+- **`Hyprland --verify-config` executes config code.** Top-level `hl.exec_cmd()` and `config.reloaded`
+  handlers run during verification (`hyprland.start` handlers don't). Launch things from
+  `hl.on("hyprland.start", …)`, and never let a converted `exec =` become top-level code.
+- **Under a Lua config, `hyprctl dispatch <legacy name>` and `hyprctl keyword` are rejected** ("dispatch in
+  lua is a shorthand for hl.dispatch(...)", "keyword can't work with non-legacy parsers. Use eval.").
+  Every fh-* call uses the Lua form with the legacy one as fallback (see Conventions).
+- **`hyprctl binds` reports every Lua bind as dispatcher `__lua`.** `fh-menu-keybindings` recovers what
+  each does by running hyprland.lua under the standalone `lua` interpreter against a recording stub
+  (the `lua` package ships for this).
+- **hyprlang `##` is a literal `#`**: the old gum template wrote `#{{ color }}` and hyprlang folded the
+  doubled `#`. Lua strings don't; templates use `{{ color }}`. The converter applies the same rule.
+- **Lua keysym names are case-sensitive where hyprlang wasn't**: `COMMA` doesn't match, `comma` does.
+- **The rollback guard fires whenever the defaults are unreadable**, not only after a rollback: a test
+  that copied the defaults into a `mktemp -d` (mode 700) made the staged hyprland.lua rename itself
+  mid-verification, which then "passed". `hypr-conf2lua` refuses to migrate without readable defaults
+  and checks the staged hyprland.lua is still there after verifying.
+
 ## Migrating a home
 
 `tools/migrate-home.sh` copies the author's dotfiles from the old Omarchy machine onto a fedora-hypr drive
 (`sudo tools/migrate-home.sh /dev/sdX3`, or `--dest DIR` for an already-mounted disk; `--dry-run` first).
 It copies shell (`.zshrc` split so the secrets block lands in `~/.zshrc.local`, mode 600), `.ssh`, oh-my-zsh,
 tmux/btop/lazygit/git/fastfetch/starship, `dotfiles` + the `.config/nvim` symlink (AstroNvim), RadioBar, fonts,
-`.local/share/applications`, Waybar and the `~/.config/hypr/*.conf` overrides — rewriting `omarchy-`→`fh-`,
+`.local/share/applications`, Waybar and the `~/.config/hypr/*.conf` overrides (converted to `*.lua` with
+`hypr-conf2lua convert`, unverified — see "Hyprland config (Lua)") — rewriting `omarchy-`→`fh-`,
 `$OMARCHY_PATH`→`/usr/share/fedora-hypr`, `~/.cargo/bin/waybar-docker`→`waybar-docker`, native apps→`flatpak run`,
 dropping the voxtype module, and rewriting `custom/update`'s `exec`/`on-click`/`tooltip-format` to
 `fh-update-available`/`fh-update` instead of dropping it; of `.local/share/applications` only `claude-code-url-handler.desktop`
@@ -464,7 +552,10 @@ are the only places the upstream project's name is allowed outside `LICENSE-THIR
 
 ## Reference material on the host (read-only)
 
-- Upstream (Omarchy 3.8.5) install: `~/.local/share/omarchy` (`bin/`, `default/`, `themes/`, `config/`).
+- Upstream source: the Hyprland Lua config was re-ported from the v4.0.4 tag
+  (`git clone --depth 1 --branch v4.0.4 https://github.com/basecamp/omarchy` into a scratch dir;
+  `default/hypr/`, `config/hypr/`, `bin/`); pre-Lua files came from 3.8.x. A host install may also exist at
+  `~/.local/share/omarchy` (`bin/`, `default/`, `themes/`, `config/`).
   When porting a script: copy, apply the path sed used in the plan (Task 7), rename `omarchy-`→`fh-`,
   drop Arch/pacman/limine/snapper call sites, add the attribution line, and leave no other upstream
   strings behind (the tests fail on them).
@@ -473,11 +564,12 @@ are the only places the upstream project's name is allowed outside `LICENSE-THIR
 
 ## Current state and open items
 
-**Lua config migration (blocking Hyprland ≥0.57):** Hyprland deprecates the `.conf`/hyprlang
-format in 0.56 and removes it in 0.57 (https://hypr.land/news/26_lua/). All of `default/hypr/**`
-and skel are `.conf`; Hyprland is pinned to 0.56.x in `build/packages/copr.txt` until this is done.
-Plan: wait for upstream to migrate its defaults, then re-port from theirs (tools:
-https://github.com/loeclos/hypr-migrate). The deprecation banner at login is expected until then.
+**Hyprland 0.57 unpin (follow-up):** the config is Lua and existing accounts migrate on their next
+login (see "Hyprland config (Lua)"); Hyprland stays pinned to 0.56.x until the installed machine has
+logged in on a Lua build and `~/.config/hypr/hyprland.lua` exists there. Not yet seen on a real
+`bootc upgrade` + login (verified in-image and in a nested Hyprland session only; this machine has no
+qemu): after the first update, check `systemctl --user status fh-migrate-hypr-lua`, the notification,
+`hyprctl configerrors`, and that no deprecation banner appears.
 
 Done and verified in the VM: first boot (user, theme render, Flatpaks in background), tuigreet login,
 Hyprland session with Waybar/wallpaper/mako/Walker/SwayOSD/polkit, in-session password change,
@@ -485,7 +577,7 @@ theme switching, sshd off. CI publishes to ghcr.
 
 Not yet verified (needs the Framework 12): Wi-Fi via impala, brightness/volume keys, suspend/resume,
 fingerprint (`fh-setup-fingerprint`; PAM `with-fingerprint` is enabled), touchpad gestures, Flatpak
-app class names in `default/hypr/apps/*.conf` (1Password/LocalSend may differ under Flatpak),
+app class names in `default/hypr/apps/*.lua` (1Password/LocalSend may differ under Flatpak),
 `bootc upgrade` → `bootc rollback` round trip, the Plymouth splash on a real boot (see "Boot splash"). Record hardware findings under "Framework 12 notes" in README.
 
 Known deferred minors: `fh-brightness-display-apple` needs unpackaged `asdcontrol`; keybindings viewer

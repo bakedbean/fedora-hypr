@@ -1,5 +1,5 @@
 # dtutila/hyprland
-# pinned to the 0.56 series: 0.57 drops .conf/hyprlang support (see AGENTS.md, Lua config migration)
+# pinned to the 0.56 series until installed accounts have migrated to the Lua config (AGENTS.md, "Hyprland config (Lua)")
 hyprland-0.56*
 hyprlock
 hypridle
