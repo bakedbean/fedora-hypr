@@ -1,0 +1,3 @@
+-- This directory is intended for permanent config toggle flags.
+-- Adapted from third-party MIT-licensed code; see LICENSE-THIRD-PARTY in the source repo
+-- Do not remove this file; the directory always needs at least one file.

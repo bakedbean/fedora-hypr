@@ -21,13 +21,23 @@ walker --close >/dev/null 2>&1
 
 focused=$(fh-hyprland-monitor-focused)
 
-for m in $(hyprctl monitors -j | jq -r '.[] | .name'); do
-  hyprctl dispatch focusmonitor "$m"
+# Lua string literal for hyprctl dispatch/eval (monitor names come from the compositor,
+# but nothing here should rely on them being free of quotes or backslashes).
+lua_quote() {
+  local s=${1//\\/\\\\}
+  printf '"%s"' "${s//\"/\\\"}"
+}
 
-  hyprctl dispatch exec -- \
-    alacritty --class=org.fedorahypr.screensaver \
-    --config-file /usr/share/fedora-hypr/default/alacritty/screensaver.toml \
-    -e fh-screensaver
+# Lua dispatcher first (Hyprland's Lua config mode), legacy dispatcher as fallback.
+hypr_focus_monitor() {
+  hyprctl dispatch "hl.dsp.focus({ monitor = $(lua_quote "$1") })" >/dev/null 2>&1 || hyprctl dispatch focusmonitor "$1" >/dev/null
+}
+
+command="alacritty --class=org.fedorahypr.screensaver --config-file /usr/share/fedora-hypr/default/alacritty/screensaver.toml -e fh-screensaver"
+
+for m in $(hyprctl monitors -j | jq -r '.[] | .name'); do
+  hypr_focus_monitor "$m"
+  hyprctl dispatch "hl.dsp.exec_cmd([[$command]])" >/dev/null 2>&1 || hyprctl dispatch exec -- $command >/dev/null
 done
 
-hyprctl dispatch focusmonitor "$focused"
+hypr_focus_monitor "$focused"

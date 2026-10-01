@@ -1,0 +1,1003 @@
+#!/usr/bin/env python3
+"""Convert Hyprland .conf (hyprlang) user overrides to Lua.
+
+    hypr-conf2lua convert FILE [--vars-from FILE]...
+        Print FILE converted to a Lua module on stdout (no verification).
+    hypr-conf2lua migrate --home DIR [--defaults DIR] [--skel DIR]
+        One-time migration of DIR/.config/hypr from hyprland.conf to
+        hyprland.lua (see fh-migrate-hypr-lua, which runs it before the
+        compositor starts).
+
+Only the constructs fedora-hypr's own .conf files and typical user overrides
+use are translated (sections, `a:b = v`, $variables, bind*, unbind, env,
+monitor, windowrule, layerrule, workspace, gesture, bezier/animation,
+exec-once, device blocks, source). Anything else becomes a
+`-- FIXME(conf2lua)` comment carrying the original line, never a guess. Every
+statement is emitted on one physical line, so `migrate` can comment out
+whatever `Hyprland --verify-config` rejects and verify again until the result
+loads: a migrated config must never put Hyprland into its no-binds emergency
+mode.
+"""
+
+import argparse
+import datetime
+import os
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+
+STUBS = "/usr/share/hypr/stubs/hl.meta.lua"
+THEME_LUA = ".config/fedora-hypr/current/theme/hyprland.lua"
+FIXME = "-- FIXME(conf2lua)"
+
+# Variables the old image defaults defined (default/hypr/looknfeel.conf); user
+# files could reference them since hyprlang variables are global.
+DEFAULT_VARS = {
+    "activeBorderColor": "rgba(33ccffee) rgba(00ff99ee) 45deg",
+    "inactiveBorderColor": "rgba(595959aa)",
+}
+
+BOOL_TRUE = {"true", "yes", "on", "1"}
+BOOL_FALSE = {"false", "no", "off", "0"}
+INT_RE = re.compile(r"[+-]?(0x[0-9a-fA-F]+|\d+)$")
+FLOAT_RE = re.compile(r"[+-]?(\d+\.\d*|\.\d+|\d+)$")
+COLOR_RE = re.compile(r"(rgba?\([0-9a-fA-F,. ]+\)|0x[0-9a-fA-F]{8})$")
+MODS = ["SUPER", "SHIFT", "CTRL", "CONTROL", "ALT", "MOD2", "MOD3", "MOD4", "MOD5", "WIN", "LOGO", "CAPS"]
+MOD_ALIASES = {"CONTROL": "CTRL", "WIN": "SUPER", "LOGO": "SUPER", "MOD4": "SUPER"}
+BIND_FLAGS = {
+    "l": "locked",
+    "r": "release",
+    "e": "repeating",
+    "n": "non_consuming",
+    "m": "mouse",
+    "t": "transparent",
+    "i": "ignore_mods",
+    "p": "dont_inhibit",
+    "o": "long_press",
+    "c": "click",
+    "g": "drag",
+    "u": "submap_universal",
+}
+# Window-rule match props whose 0/1 values are booleans in Lua.
+BOOL_MATCH_PROPS = {"xwayland", "float", "fullscreen", "pin", "focus", "group", "modal"}
+
+
+# --------------------------------------------------------------------------
+# Lua literals and types
+
+
+def lua_str(value):
+    escaped = value.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n").replace("\r", "\\r")
+    return '"' + escaped + '"'
+
+
+def lua_key(key):
+    if re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", key):
+        return key
+    return "[" + lua_str(key) + "]"
+
+
+def lua_table(pairs):
+    """pairs: list of (key, lua-literal) or (None, literal) for array items."""
+    parts = []
+    for key, value in pairs:
+        parts.append(value if key is None else lua_key(key) + " = " + value)
+    return "{ " + ", ".join(parts) + " }" if parts else "{}"
+
+
+def load_types(path):
+    config, classes, current = {}, {}, None
+    try:
+        with open(path) as handle:
+            for line in handle:
+                match = re.match(r"---@field \['([^']+)'\] (\S+)", line)
+                if match:
+                    config[match.group(1)] = match.group(2)
+                    continue
+                match = re.match(r"---@class (\S+)", line)
+                if match:
+                    current = match.group(1)
+                    classes[current] = {}
+                    continue
+                match = re.match(r"---@field (\w+)\??\s+(\S+)", line)
+                if match and current:
+                    classes[current][match.group(1)] = match.group(2)
+    except OSError:
+        pass
+    return config, classes
+
+
+CONFIG_TYPES, CLASS_TYPES = load_types(STUBS)
+
+
+def number_literal(raw):
+    if INT_RE.match(raw):
+        return str(int(raw, 0))
+    if FLOAT_RE.match(raw):
+        return raw if not raw.startswith(".") else "0" + raw
+    return None
+
+
+def gradient_literal(raw):
+    tokens = raw.split()
+    angle = None
+    if tokens and re.match(r"^-?\d+(\.\d+)?deg$", tokens[-1]):
+        angle = tokens.pop()[:-3]
+    if not tokens or not all(COLOR_RE.match(t) for t in tokens):
+        return None
+    if len(tokens) == 1 and angle is None:
+        return lua_str(tokens[0])
+    colors = lua_table([(None, lua_str(t)) for t in tokens])
+    pairs = [("colors", colors)]
+    if angle is not None:
+        pairs.append(("angle", angle))
+    return lua_table(pairs)
+
+
+def css_gap_literal(raw):
+    values = raw.replace(",", " ").split()
+    if not values or not all(INT_RE.match(v) for v in values):
+        return None
+    if len(values) == 1:
+        return str(int(values[0], 0))
+    top, right, bottom, left = {
+        2: (values[0], values[1], values[0], values[1]),
+        3: (values[0], values[1], values[2], values[1]),
+        4: tuple(values),
+    }.get(len(values), (values[0],) * 4)
+    return lua_table([("top", top), ("right", right), ("bottom", bottom), ("left", left)])
+
+
+def guess_literal(raw):
+    lower = raw.lower()
+    if lower in ("true", "yes", "on"):
+        return "true"
+    if lower in ("false", "no", "off"):
+        return "false"
+    number = number_literal(raw)
+    if number is not None:
+        return number
+    if len(raw.split()) > 1:
+        gradient = gradient_literal(raw)
+        if gradient:
+            return gradient
+    return lua_str(raw)
+
+
+def typed_literal(raw, typ):
+    """Convert a hyprlang value to a Lua literal for a value of stub type typ."""
+    raw = raw.strip()
+    lower = raw.lower()
+    if typ is None:
+        return guess_literal(raw)
+    allows_bool = "boolean" in typ
+    if typ == "boolean":
+        if lower in BOOL_TRUE:
+            return "true"
+        if lower in BOOL_FALSE:
+            return "false"
+        return lua_str(raw)
+    if "CssGap" in typ:
+        gap = css_gap_literal(raw)
+        if gap:
+            return gap
+    if typ.startswith("integer") or typ.startswith("number"):
+        number = number_literal(raw)
+        if number is not None:
+            return number
+        if allows_bool and lower in BOOL_TRUE:
+            return "true"
+        if allows_bool and lower in BOOL_FALSE:
+            return "false"
+        return lua_str(raw)
+    if "Gradient" in typ:
+        return gradient_literal(raw) or lua_str(raw)
+    return lua_str(raw)
+
+
+def rule_literal(raw):
+    """Window/layer rule effect value: Lua wants bools for on/off, numbers for
+    single numbers and strings for everything else ("0.9 0.8", "875 600")."""
+    raw = raw.strip()
+    lower = raw.lower()
+    if raw == "" or lower in ("on", "true", "yes"):
+        return "true"
+    if lower in ("off", "false", "no"):
+        return "false"
+    number = number_literal(raw)
+    if number is not None:
+        return number
+    return lua_str(raw)
+
+
+# --------------------------------------------------------------------------
+# hyprlang lexing
+
+
+def strip_comment(line):
+    """Split off a hyprlang comment: `#` starts one, `##` is a literal `#`."""
+    out, i = [], 0
+    while i < len(line):
+        char = line[i]
+        if char == "#":
+            if i + 1 < len(line) and line[i + 1] == "#":
+                out.append("#")
+                i += 2
+                continue
+            return "".join(out), line[i + 1 :].strip()
+        out.append(char)
+        i += 1
+    return "".join(out), None
+
+
+def split_args(value, count):
+    """Split on commas into at most count fields; the last keeps the rest."""
+    parts = value.split(",", count - 1) if count > 0 else value.split(",")
+    return [p.strip() for p in parts]
+
+
+class Converter:
+    def __init__(self, home, variables=None, module_for_source=None):
+        self.home = home
+        self.vars = dict(DEFAULT_VARS)
+        if variables:
+            self.vars.update(variables)
+        # Callback: absolute path -> ("require", module) | ("skip", why) | None
+        self.module_for_source = module_for_source
+        self.fixmes = 0
+        # hyprlang's current submap persists across lines and sourced files until
+        # `submap = reset`; a bind inside one must never become a global bind.
+        self.submap = None
+
+    # -- helpers ----------------------------------------------------------
+
+    def expand(self, text):
+        if "$" not in text:
+            return text
+        for name in sorted(self.vars, key=len, reverse=True):
+            text = text.replace("$" + name, self.vars[name])
+        return text
+
+    def fixme(self, why, original):
+        self.fixmes += 1
+        return f"{FIXME}: {why}: {original.strip()}"
+
+    def expand_path(self, path):
+        path = path.strip()
+        if path.startswith("~/"):
+            path = os.path.join(self.home, path[2:])
+        return path
+
+    # -- statements -------------------------------------------------------
+
+    def config_assign(self, path, raw, original):
+        key = ".".join(path)
+        literal = typed_literal(raw, CONFIG_TYPES.get(key))
+        table = literal
+        for part in reversed(path):
+            table = "{ " + lua_key(part) + " = " + table + " }"
+        return f"hl.config({table})"
+
+    def bind(self, keyword, value, original):
+        flags = keyword[4:]
+        has_desc = "d" in flags
+        opts = []
+        for flag in flags:
+            if flag == "d":
+                continue
+            if flag not in BIND_FLAGS:
+                return self.fixme(f"bind flag '{flag}' has no Lua equivalent here", original)
+            opts.append((BIND_FLAGS[flag], "true"))
+
+        fields = split_args(value, 5 if has_desc else 4)
+        if len(fields) < (4 if has_desc else 3):
+            fields += [""] * ((4 if has_desc else 3) - len(fields))
+        mods, key = fields[0], fields[1]
+        if has_desc:
+            description, dispatcher = fields[2], fields[3]
+            args = fields[4] if len(fields) > 4 else ""
+        else:
+            description, dispatcher = None, fields[2]
+            args = fields[3] if len(fields) > 3 else ""
+
+        keys = self.keys(mods, key)
+        if keys is None:
+            return self.fixme("unrecognised modifiers", original)
+        dsp = self.dispatcher(dispatcher.strip(), args.strip())
+        if dsp is None:
+            return self.fixme(f"dispatcher '{dispatcher.strip()}' needs a manual port", original)
+        if description:
+            opts.insert(0, ("description", lua_str(description)))
+        tail = ", " + lua_table(opts) if opts else ""
+        return f"hl.bind({lua_str(keys)}, {dsp}{tail})"
+
+    def keys(self, mods, key):
+        names = []
+        rest = mods.upper().replace("_", " ").replace("+", " ")
+        for token in rest.split():
+            while token:
+                for mod in MODS:
+                    if token.startswith(mod):
+                        names.append(MOD_ALIASES.get(mod, mod))
+                        token = token[len(mod) :]
+                        break
+                else:
+                    return None
+        key = key.strip()
+        if key.upper() == "COMMA":
+            key = "comma"  # xkbcommon's keysym name; "COMMA" does not match in Lua binds
+        return " + ".join(names + [key]) if key else None
+
+    def dispatcher(self, name, args):
+        n = name.lower()
+        a = args.strip()
+        q = lua_str
+
+        def direction():
+            return a if a in ("l", "r", "u", "d") else None
+
+        if n in ("exec", "execr"):
+            return f"hl.dsp.exec_cmd({q(a)})" if a else None
+        simple = {
+            "killactive": "hl.dsp.window.close()",
+            "forcekillactive": "hl.dsp.window.kill()",
+            "pseudo": "hl.dsp.window.pseudo()",
+            "pin": "hl.dsp.window.pin()",
+            "centerwindow": "hl.dsp.window.center()",
+            "bringactivetotop": "hl.dsp.window.bring_to_top()",
+            "togglegroup": "hl.dsp.group.toggle()",
+            "moveoutofgroup": "hl.dsp.window.move({ out_of_group = true })",
+            "exit": "hl.dsp.exit()",
+            "togglesplit": 'hl.dsp.layout("togglesplit")',
+            "forcerendererreload": "hl.dsp.force_renderer_reload()",
+        }
+        if n in simple and not a:
+            return simple[n]
+        if n == "togglefloating" and not a:
+            return 'hl.dsp.window.float({ action = "toggle" })'
+        if n == "fullscreen":
+            mode = {"": "fullscreen", "0": "fullscreen", "1": "maximized"}.get(a)
+            return f'hl.dsp.window.fullscreen({{ mode = "{mode}" }})' if mode else None
+        if n == "fullscreenstate":
+            parts = a.split()
+            if len(parts) == 2 and all(INT_RE.match(p) for p in parts):
+                return f"hl.dsp.window.fullscreen_state({{ internal = {parts[0]}, client = {parts[1]} }})"
+            return None
+        if n == "movefocus" and direction():
+            return f"hl.dsp.focus({{ direction = {q(a)} }})"
+        if n == "swapwindow" and direction():
+            return f"hl.dsp.window.swap({{ direction = {q(a)} }})"
+        if n == "moveintogroup" and direction():
+            return f"hl.dsp.window.move({{ into_group = {q(a)} }})"
+        if n == "workspace" and a and "," not in a:
+            return f"hl.dsp.focus({{ workspace = {q(a)} }})"
+        if n == "movetoworkspace" and a and "," not in a:
+            return f"hl.dsp.window.move({{ workspace = {q(a)} }})"
+        if n == "movetoworkspacesilent" and a and "," not in a:
+            return f"hl.dsp.window.move({{ workspace = {q(a)}, follow = false }})"
+        if n == "focusmonitor" and a:
+            return f"hl.dsp.focus({{ monitor = {q(a)} }})"
+        if n == "focuswindow" and a:
+            return f"hl.dsp.focus({{ window = {q(a)} }})"
+        if n == "movecurrentworkspacetomonitor" and a:
+            return f"hl.dsp.workspace.move({{ monitor = {q(a)} }})"
+        if n == "togglespecialworkspace":
+            return f"hl.dsp.workspace.toggle_special({q(a)})" if a else "hl.dsp.workspace.toggle_special()"
+        if n == "cyclenext":
+            if not a:
+                return "hl.dsp.window.cycle_next()"
+            if a == "prev":
+                return "hl.dsp.window.cycle_next({ next = false })"
+            return None
+        if n == "changegroupactive":
+            if a in ("", "f"):
+                return "hl.dsp.group.next()"
+            if a == "b":
+                return "hl.dsp.group.prev()"
+            if INT_RE.match(a):
+                return f"hl.dsp.group.active({{ index = {int(a)} }})"
+            return None
+        if n == "resizeactive":
+            parts = a.split()
+            if len(parts) == 2 and all(INT_RE.match(p) for p in parts):
+                return f"hl.dsp.window.resize({{ x = {int(parts[0])}, y = {int(parts[1])}, relative = true }})"
+            if len(parts) == 3 and parts[0] == "exact" and all(INT_RE.match(p) for p in parts[1:]):
+                return f"hl.dsp.window.resize({{ x = {int(parts[1])}, y = {int(parts[2])} }})"
+            return None
+        if n == "movewindow" and not a:
+            return "hl.dsp.window.drag()"
+        if n == "resizewindow" and not a:
+            return "hl.dsp.window.resize()"
+        if n == "layoutmsg" and a:
+            return f"hl.dsp.layout({q(a)})"
+        if n == "dpms":
+            action = {"": "toggle", "toggle": "toggle", "on": "enable", "off": "disable"}.get(a)
+            return f'hl.dsp.dpms({{ action = "{action}" }})' if action else None
+        return None
+
+    def window_rule(self, value, original, layer=False):
+        items = []
+        for piece in value.split(","):
+            piece = piece.strip()
+            # A comma inside a regex (match:title ^(a,b)$) splits too eagerly:
+            # anything that doesn't start like a rule item belongs to the previous one.
+            if items and not re.match(r"^(match:)?[a-z_]+(\s|$)", piece):
+                items[-1] += "," + piece
+            else:
+                items.append(piece)
+        match, effects = [], []
+        for item in items:
+            if not item:
+                continue
+            if item.startswith("match:"):
+                prop, _, val = item[6:].partition(" ")
+                val = val.strip()
+                if prop in BOOL_MATCH_PROPS and val.lower() in BOOL_TRUE | BOOL_FALSE:
+                    literal = "true" if val.lower() in BOOL_TRUE else "false"
+                else:
+                    literal = lua_str(val)
+                match.append((prop, literal))
+            else:
+                name, _, val = item.partition(" ")
+                effects.append((name, rule_literal(val)))
+        if not match or not effects:
+            return self.fixme("rule needs at least one match: and one effect (old windowrule syntax?)", original)
+        call = "hl.layer_rule" if layer else "hl.window_rule"
+        return f"{call}({lua_table([('match', lua_table(match))] + effects)})"
+
+    def monitor(self, value, original):
+        fields = split_args(value, 0)
+        if len(fields) == 2 and fields[1].lower() == "disable":
+            return f"hl.monitor({{ output = {lua_str(fields[0])}, disabled = true }})"
+        if len(fields) < 4:
+            return self.fixme("monitor rule needs output, mode, position, scale", original)
+        output, mode, position, scale = fields[:4]
+        scale_literal = number_literal(scale) or lua_str(scale)
+        pairs = [
+            ("output", lua_str(output)),
+            ("mode", lua_str(mode)),
+            ("position", lua_str(position)),
+            ("scale", scale_literal),
+        ]
+        extras = fields[4:]
+        if len(extras) % 2:
+            return self.fixme("monitor extra arguments must come in key, value pairs", original)
+        spec = CLASS_TYPES.get("HL.MonitorSpec", {})
+        for key, val in zip(extras[::2], extras[1::2]):
+            pairs.append((key, typed_literal(val, spec.get(key))))
+        return f"hl.monitor({lua_table(pairs)})"
+
+    def workspace(self, value, original):
+        fields = split_args(value, 0)
+        pairs = [("workspace", lua_str(fields[0]))]
+        spec = CLASS_TYPES.get("HL.WorkspaceRuleSpec", {})
+        for field in fields[1:]:
+            key, sep, val = field.partition(":")
+            if not sep:
+                return self.fixme("workspace rule option without key:value", original)
+            key = {"defaultName": "default_name", "on-created-empty": "on_created_empty",
+                   "gapsin": "gaps_in", "gapsout": "gaps_out", "bordersize": "border_size",
+                   "border": "decorate", "rounding": "no_rounding", "shadow": "no_shadow"}.get(key, key)
+            if key == "no_rounding" or key == "no_shadow":
+                val = "false" if val.strip().lower() in BOOL_TRUE else "true"
+            pairs.append((key, typed_literal(val, spec.get(key))))
+        return f"hl.workspace_rule({lua_table(pairs)})"
+
+    def gesture(self, value, original):
+        fields = split_args(value, 0)
+        if len(fields) < 3 or not INT_RE.match(fields[0]):
+            return self.fixme("gesture needs fingers, direction, action", original)
+        pairs = [("fingers", fields[0]), ("direction", lua_str(fields[1]))]
+        rest = fields[2:]
+        while rest and ":" in rest[0]:
+            key, _, val = rest.pop(0).partition(":")
+            key = {"mod": "mods"}.get(key.strip(), key.strip())
+            pairs.append((key, typed_literal(val, CLASS_TYPES.get("HL.GestureSpec", {}).get(key))))
+        if len(rest) != 1 or rest[0] == "dispatcher":
+            return self.fixme("gesture action needs a manual port", original)
+        pairs.insert(2, ("action", lua_str(rest[0])))
+        return f"hl.gesture({lua_table(pairs)})"
+
+    def bezier(self, value, original):
+        fields = split_args(value, 0)
+        if len(fields) != 5 or not all(number_literal(f) for f in fields[1:]):
+            return self.fixme("bezier needs name, x0, y0, x1, y1", original)
+        x0, y0, x1, y1 = (number_literal(f) for f in fields[1:])
+        return f'hl.curve({lua_str(fields[0])}, {{ type = "bezier", points = {{ {{ {x0}, {y0} }}, {{ {x1}, {y1} }} }} }})'
+
+    def animation(self, value, original):
+        fields = split_args(value, 0)
+        if len(fields) < 2:
+            return self.fixme("animation needs leaf, on/off, ...", original)
+        leaf, onoff = fields[0], fields[1]
+        if onoff == "0":
+            return f"hl.animation({{ leaf = {lua_str(leaf)}, enabled = false }})"
+        if len(fields) < 4 or not number_literal(fields[2]):
+            return self.fixme("animation needs leaf, on/off, speed, curve[, style]", original)
+        pairs = [("leaf", lua_str(leaf)), ("enabled", "true"), ("speed", number_literal(fields[2])),
+                 ("bezier", lua_str(fields[3]))]
+        if len(fields) > 4 and fields[4]:
+            pairs.append(("style", lua_str(", ".join(fields[4:]))))
+        return f"hl.animation({lua_table(pairs)})"
+
+    def source(self, value, original):
+        path = self.expand_path(value)
+        result = self.module_for_source(path) if self.module_for_source else None
+        if result is None:
+            return self.fixme("source of a file outside ~/.config/hypr; port it by hand", original)
+        kind, what = result
+        if kind == "require":
+            return f'require("{what}")'
+        return f"-- {what}: {original.strip()}"
+
+    # -- driver -----------------------------------------------------------
+
+    def convert_lines(self, lines):
+        out = []
+        groups = []  # stack of name lists: `a:b {` opens one group of two names
+        device = None
+        for raw_line in lines:
+            line = raw_line.rstrip("\n")
+            code, comment = strip_comment(line)
+            stripped = code.strip()
+            if not stripped:
+                if comment is not None and not comment.startswith("hyprlang "):
+                    out.append(("-- " + comment).rstrip())
+                elif comment is None:
+                    out.append("")
+                continue
+
+            if stripped == "}":
+                if device is not None and groups and groups[-1] == ["device"]:
+                    groups.pop()
+                    out.append(self.device(device, line))
+                    device = None
+                elif groups:
+                    groups.pop()
+                else:
+                    out.append(self.fixme("unbalanced }", line))
+                continue
+
+            match = re.match(r"^([A-Za-z0-9_.:-]+)\s*\{$", stripped)
+            if match:
+                name = match.group(1)
+                if name == "device":
+                    groups.append(["device"])
+                    device = {"__lines__": []}
+                elif name.startswith("device[") or name in ("windowrule", "layerrule"):
+                    out.append(self.fixme(f"{name} block needs a manual port", line))
+                    groups.append(["__skip__"])
+                else:
+                    groups.append(name.split(":"))
+                continue
+
+            sections = [name for group in groups for name in group]
+            if "__skip__" in sections:
+                out.append(self.fixme("inside an unported block", line))
+                continue
+
+            match = re.match(r"^(\$[A-Za-z0-9_]+)\s*=\s*(.*)$", stripped)
+            if match:
+                name = match.group(1)[1:]
+                self.vars[name] = self.expand(match.group(2).strip())
+                out.append(f"-- ${name} = {match.group(2).strip()} (inlined below)")
+                continue
+
+            key, sep, value = stripped.partition("=")
+            if not sep:
+                out.append(self.fixme("not a key = value line", line))
+                continue
+            key = key.strip()
+            value = self.expand(value.strip())
+
+            if device is not None:
+                device[key] = value
+                device["__lines__"].append(line)
+                continue
+
+            if key.lower() == "submap":
+                self.submap = None if value.strip().lower() == "reset" else value.strip()
+                out.append(self.fixme("submaps need a manual port (hl.define_submap)", line))
+                continue
+            if self.submap is not None:
+                out.append(self.fixme(f"inside submap '{self.submap}', which needs a manual port", line))
+                continue
+
+            statement = self.statement(key, value, line, sections)
+            if comment and not statement.startswith("--"):
+                statement += "  -- " + comment
+            out.append(statement)
+        if groups:
+            out.append(self.fixme("unterminated block", "{"))
+        return out
+
+    def statement(self, key, value, line, sections):
+        k = key.lower()
+        if k.startswith("bind") and re.match(r"^bind[a-z]*$", k):
+            return self.bind(k, value, line)
+        if k == "unbind":
+            fields = split_args(value, 2)
+            keys = self.keys(fields[0], fields[1] if len(fields) > 1 else "")
+            return f"hl.unbind({lua_str(keys)})" if keys else self.fixme("unrecognised modifiers", line)
+        if k == "env":
+            name, _, val = value.partition(",")
+            return f"hl.env({lua_str(name.strip())}, {lua_str(val.strip())})"
+        if k == "monitor":
+            return self.monitor(value, line)
+        if k == "windowrule":
+            return self.window_rule(value, line)
+        if k == "layerrule":
+            return self.window_rule(value, line, layer=True)
+        if k == "workspace":
+            return self.workspace(value, line)
+        if k == "gesture":
+            return self.gesture(value, line)
+        if k == "bezier":
+            return self.bezier(value, line)
+        if k == "animation":
+            return self.animation(value, line)
+        if k in ("exec-once", "execr-once"):
+            return f'hl.on("hyprland.start", function() hl.exec_cmd({lua_str(value)}) end)'
+        if k == "exec-shutdown":
+            return f'hl.on("hyprland.shutdown", function() hl.exec_cmd({lua_str(value)}) end)'
+        if k in ("exec", "execr"):
+            return self.fixme("exec runs on every reload; use hl.on(\"config.reloaded\", ...) or exec-once", line)
+        if k == "source":
+            return self.source(value, line)
+        if k in ("windowrulev2", "layerrulev2", "plugin", "permission"):
+            return self.fixme(f"'{k}' needs a manual port", line)
+        path = sections + [p for p in re.split(r"[:.]", key) if p]
+        if not path or not all(re.match(r"^[A-Za-z0-9_]+$", p) for p in path):
+            return self.fixme("unrecognised key", line)
+        return self.config_assign(path, value, line)
+
+    def device(self, fields, line):
+        lines = fields.pop("__lines__")
+        name = fields.pop("name", None)
+        if not name:
+            return "\n".join(self.fixme("device block without a name", l) for l in lines)
+        spec = CLASS_TYPES.get("HL.DeviceSpec", {})
+        pairs = [("name", lua_str(name))]
+        for key, val in fields.items():
+            pairs.append((key, typed_literal(val, spec.get(key))))
+        return f"hl.device({lua_table(pairs)})"
+
+
+def read_lines(path):
+    with open(path, encoding="utf-8", errors="surrogateescape") as handle:
+        return handle.readlines()
+
+
+def collect_vars(paths):
+    variables = {}
+    for path in paths:
+        try:
+            lines = read_lines(path)
+        except OSError:
+            continue
+        conv = Converter(os.path.expanduser("~"), variables)
+        for line in lines:
+            code, _ = strip_comment(line)
+            match = re.match(r"^\s*\$([A-Za-z0-9_]+)\s*=\s*(.*)$", code)
+            if match:
+                variables[match.group(1)] = conv.expand(match.group(2).strip())
+                conv.vars.update(variables)
+    return variables
+
+
+# --------------------------------------------------------------------------
+# migrate
+
+
+def module_name(stem):
+    return re.sub(r"[^A-Za-z0-9_-]", "_", stem)
+
+
+class Migration:
+    def __init__(self, home, fh_path, skel):
+        self.home = home
+        self.hypr = os.path.join(home, ".config", "hypr")
+        self.fh_path = fh_path.rstrip("/")
+        self.skel = skel
+        self.modules = {}  # module stem -> list of lines (in conversion order)
+        self.order = []  # stems required from hyprland.lua
+        self.visiting = set()
+        theme = os.path.join(home, ".config", "fedora-hypr", "current", "theme", "hyprland.conf")
+        self.conv = Converter(home, collect_vars([theme]), self.module_for_source)
+
+    def module_for_source(self, path):
+        real = os.path.normpath(path)
+        image_default = real.startswith(self.fh_path + "/default/") or real.startswith("/usr/share/fedora-hypr/default/")
+        if image_default or "/fedora-hypr/current/theme/" in real or "/toggles/hypr/" in real:
+            return ("skip", "replaced by the image's Lua defaults")
+        if os.path.dirname(real) == os.path.normpath(self.hypr) and real.endswith(".conf"):
+            stem = module_name(os.path.basename(real)[:-5])
+            if stem in ("hyprland", "hypridle", "hyprlock"):
+                return None
+            if not os.path.exists(real):
+                return ("skip", "sourced file did not exist")
+            self.convert_module(stem, real)
+            return ("require", "hypr." + stem)
+        return None
+
+    def convert_module(self, stem, path):
+        if stem in self.modules or stem in self.visiting:
+            return
+        self.visiting.add(stem)
+        body = self.conv.convert_lines(read_lines(path))
+        self.visiting.discard(stem)
+        header = [
+            f"-- Converted from {os.path.basename(path)} by the fedora-hypr Lua migration.",
+            "-- The original is kept beside it and in the legacy-conf-* backup directory.",
+            "",
+        ]
+        self.modules[stem] = header + body
+
+    def plan(self):
+        """Walk hyprland.conf in order. Sourced ~/.config/hypr files become modules;
+        statements written in hyprland.conf itself become "inline" modules placed
+        where they stood, so later lines still override earlier ones."""
+        taken = {module_name(n[:-5]) for n in os.listdir(self.hypr) if n.endswith(".conf")}
+        chunk = []
+
+        def flush():
+            if not chunk:
+                return
+            body = self.conv.convert_lines(chunk)
+            chunk.clear()
+            if not any(l.strip() and (not l.startswith("--") or l.startswith(FIXME)) for l in body):
+                return
+            number, stem = 1, "hyprland-inline"
+            while stem in taken or stem in self.modules:
+                number += 1
+                stem = f"hyprland-inline-{number}"
+            self.modules[stem] = [
+                "-- Statements written directly in hyprland.conf, converted by the fedora-hypr Lua migration.",
+                "",
+            ] + body
+            self.order.append(stem)
+
+        for line in read_lines(os.path.join(self.hypr, "hyprland.conf")):
+            code, _ = strip_comment(line)
+            match = re.match(r"^\s*source\s*=\s*(.+)$", code)
+            if match:
+                path = self.conv.expand_path(self.conv.expand(match.group(1)))
+                flush()
+                result = self.module_for_source(path)
+                if result and result[0] == "require":
+                    stem = result[1][len("hypr.") :]
+                    if stem not in self.order:
+                        self.order.append(stem)
+                elif result is None:
+                    chunk.append(line)
+                continue
+            chunk.append(line)
+        flush()
+
+    def entrypoint(self):
+        template = read_lines(os.path.join(self.skel, "hyprland.lua"))
+        out, inserted = [], False
+        for line in template:
+            if re.match(r'^user\("hypr\.[A-Za-z0-9_-]+"\)\s*$', line):
+                if not inserted:
+                    out.extend(f'user("hypr.{stem}")\n' for stem in self.order)
+                    inserted = True
+                continue
+            out.append(line)
+        if not inserted:
+            raise SystemExit("skel hyprland.lua has no user(\"hypr.*\") block")
+        return "".join(out)
+
+    def write_stage(self, stage_home):
+        hypr = os.path.join(stage_home, ".config", "hypr")
+        os.makedirs(hypr)
+        for stem, lines in self.modules.items():
+            with open(os.path.join(hypr, stem + ".lua"), "w") as handle:
+                handle.write("\n".join(lines).rstrip("\n") + "\n")
+        with open(os.path.join(hypr, "hyprland.lua"), "w") as handle:
+            handle.write(self.entrypoint())
+        # The theme is copied, not linked: verification may comment lines out of its
+        # hyprland.lua, and a migration that fails must leave the real one alone.
+        theme = os.path.join(self.home, ".config", "fedora-hypr", "current", "theme")
+        if os.path.isdir(theme):
+            shutil.copytree(theme, os.path.join(stage_home, ".config", "fedora-hypr", "current", "theme"), symlinks=True)
+        # Toggles are only read.
+        state = os.path.join(self.home, ".local", "state", "fedora-hypr")
+        if os.path.exists(state):
+            os.makedirs(os.path.join(stage_home, ".local", "state"), exist_ok=True)
+            os.symlink(state, os.path.join(stage_home, ".local", "state", "fedora-hypr"))
+        return hypr
+
+    def verify(self, stage_home):
+        env = dict(os.environ, HOME=stage_home, FH_PATH=self.fh_path, FH_VERIFY_STRICT="1")
+        runtime = env.get("XDG_RUNTIME_DIR")
+        if not runtime or not os.path.isdir(runtime):
+            env["XDG_RUNTIME_DIR"] = tempfile.mkdtemp(prefix="fh-verify-")
+        config = os.path.join(stage_home, ".config", "hypr", "hyprland.lua")
+        result = subprocess.run(
+            ["Hyprland", "--verify-config", "-c", config],
+            env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, errors="replace",
+            timeout=60,
+        )
+        return result.returncode, result.stdout
+
+    def fix(self, stage_hypr, output):
+        """Comment out every user-file line the verifier complained about.
+        Returns (fixed_count, foreign_errors)."""
+        fixed, foreign = 0, []
+        in_traceback = False
+        for line in output.splitlines():
+            # Lua tracebacks name every frame (hyprland.lua's require included);
+            # only the error lines themselves locate the bad statement.
+            if line.startswith("stack traceback:"):
+                in_traceback = True
+                continue
+            if in_traceback and line[:1] in ("\t", " "):
+                continue
+            in_traceback = False
+            refs = re.findall(r"(/[^:\s']+\.lua):(\d+): ", line)
+            if not refs:
+                continue
+            # The user's modules, and the current theme's hyprland.lua (a rendered copy,
+            # possibly converted from a theme's own hyprland.conf; fh-theme-set redoes it).
+            theme = os.path.join(os.path.dirname(os.path.dirname(stage_hypr)), THEME_LUA)
+            ours = [(p, n) for p, n in refs
+                    if (os.path.dirname(p) == stage_hypr and os.path.basename(p) != "hyprland.lua") or p == theme]
+            if not ours:
+                foreign.append(line.strip())
+                continue
+            path, number = ours[-1]
+            number = int(number)
+            message = line.split(f"{path}:{number}: ", 1)[-1]
+            with open(path) as handle:
+                lines = handle.readlines()
+            index = number - 1
+            if index >= len(lines) or lines[index].lstrip().startswith("--"):
+                continue
+            lines[index] = f"{FIXME}: Hyprland rejected this ({message.strip()}): {lines[index].strip()}\n"
+            with open(path, "w") as handle:
+                handle.writelines(lines)
+            fixed += 1
+        return fixed, foreign
+
+    def run(self, report_path):
+        # Without readable defaults the skel hyprland.lua's rollback guard would
+        # step aside and "verify" an empty config.
+        if not os.access(os.path.join(self.fh_path, "default", "hypr", "bootstrap.lua"), os.R_OK):
+            sys.stderr.write(f"no readable Lua defaults under {self.fh_path}; not migrating\n")
+            return 2
+        self.plan()
+        stage_home = tempfile.mkdtemp(prefix="fh-hypr-lua-")
+        try:
+            stage_hypr = self.write_stage(stage_home)
+            # Each pass takes well under a second; the cap keeps the whole run
+            # inside the unit's TimeoutStartSec even for a very broken config.
+            for _ in range(100):
+                code, output = self.verify(stage_home)
+                if code == 0 and not os.path.exists(os.path.join(stage_hypr, "hyprland.lua")):
+                    sys.stderr.write("hyprland.lua stepped aside during verification; not migrating\n")
+                    return 2
+                if code == 0:
+                    break
+                fixed, foreign = self.fix(stage_hypr, output)
+                if foreign:
+                    sys.stderr.write("verification failed outside your files; not migrating:\n" + "\n".join(foreign) + "\n")
+                    return 2
+                if not fixed:
+                    sys.stderr.write("verification failed and nothing left to comment out; not migrating:\n" + output)
+                    return 2
+            else:
+                return 2
+            return self.install(stage_hypr, report_path)
+        finally:
+            shutil.rmtree(stage_home, ignore_errors=True)
+
+    def install(self, stage_hypr, report_path):
+        stamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+        backup = os.path.join(self.hypr, "legacy-conf-" + stamp)
+        installed, displaced, notes = [], [], []
+        theme = os.path.join(self.home, THEME_LUA)
+        staged_theme = os.path.join(os.path.dirname(os.path.dirname(stage_hypr)), THEME_LUA)
+        theme_before = None
+        try:
+            os.makedirs(backup)
+            for name in sorted(os.listdir(self.hypr)):
+                if name.endswith(".conf") and os.path.isfile(os.path.join(self.hypr, name)):
+                    shutil.copy2(os.path.join(self.hypr, name), backup)
+            names = sorted(n for n in os.listdir(stage_hypr) if n.endswith(".lua") and n != "hyprland.lua")
+            for name in names:
+                target = os.path.join(self.hypr, name)
+                if os.path.exists(target):
+                    os.rename(target, f"{target}.pre-migration-{stamp}")
+                    displaced.append(target)
+                shutil.copy2(os.path.join(stage_hypr, name), target)
+                installed.append(target)
+                with open(target) as handle:
+                    for number, line in enumerate(handle, 1):
+                        if line.startswith(FIXME):
+                            notes.append(f"~/.config/hypr/{name}:{number}: {line[len(FIXME) + 2:].strip()}")
+            if os.path.exists(staged_theme):
+                if os.path.exists(theme):
+                    with open(theme) as handle:
+                        theme_before = handle.read()
+                shutil.copyfile(staged_theme, theme)
+            if os.path.exists(theme):
+                with open(theme) as handle:
+                    for number, line in enumerate(handle, 1):
+                        if line.startswith(FIXME):
+                            notes.append(f"~/{THEME_LUA}:{number}: {line[len(FIXME) + 2:].strip()}")
+            luarc = os.path.join(self.skel, ".luarc.json")
+            if os.path.exists(luarc) and not os.path.exists(os.path.join(self.hypr, ".luarc.json")):
+                shutil.copy2(luarc, self.hypr)
+                installed.append(os.path.join(self.hypr, ".luarc.json"))
+            # The report too, before the switch: after it nothing may fail.
+            os.makedirs(os.path.dirname(report_path), exist_ok=True)
+            report_tmp = report_path + ".tmp"
+            with open(report_tmp, "w") as handle:
+                handle.write(f"backup={backup}\n")
+                handle.write("modules=" + " ".join(self.order) + "\n")
+                for note in notes:
+                    handle.write("review " + note + "\n")
+            installed.append(report_tmp)
+            # hyprland.lua last: its presence is what switches Hyprland to Lua.
+            tmp = os.path.join(self.hypr, ".hyprland.lua.tmp")
+            shutil.copy2(os.path.join(stage_hypr, "hyprland.lua"), tmp)
+            os.rename(report_tmp, report_path)
+            installed.append(report_path)
+            installed.append(tmp)
+            os.rename(tmp, os.path.join(self.hypr, "hyprland.lua"))  # the switch; nothing after it
+        except OSError as error:
+            # Before the switch nothing is in effect yet: put everything back.
+            for path in installed:
+                if os.path.exists(path):
+                    os.remove(path)
+            for path in displaced:
+                os.rename(f"{path}.pre-migration-{stamp}", path)
+            if theme_before is not None:
+                with open(theme, "w") as handle:
+                    handle.write(theme_before)
+            shutil.rmtree(backup, ignore_errors=True)
+            sys.stderr.write(f"install failed, nothing changed: {error}\n")
+            return 1
+
+        print(f"migrated {', '.join(self.order) or 'nothing'}; {len(notes)} line(s) to review; backup in {backup}")
+        return 0
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    sub = parser.add_subparsers(dest="command", required=True)
+    convert = sub.add_parser("convert")
+    convert.add_argument("file")
+    convert.add_argument("--vars-from", action="append", default=[])
+    migrate = sub.add_parser("migrate")
+    migrate.add_argument("--home", required=True)
+    migrate.add_argument("--defaults", dest="fh_path", default=os.environ.get("FH_PATH") or "/usr/share/fedora-hypr")
+    migrate.add_argument("--skel", default="/etc/skel/.config/hypr")
+    migrate.add_argument("--report", default=None)
+    args = parser.parse_args()
+
+    if args.command == "convert":
+        conv = Converter(os.path.expanduser("~"), collect_vars(args.vars_from + [args.file]),
+                         lambda path: ("require", "hypr." + module_name(os.path.basename(path)[:-5]))
+                         if os.path.dirname(path) == os.path.expanduser("~/.config/hypr") and path.endswith(".conf")
+                         else None)
+        sys.stdout.write("\n".join(conv.convert_lines(read_lines(args.file))).rstrip("\n") + "\n")
+        return 0
+
+    home = os.path.abspath(args.home)
+    hypr = os.path.join(home, ".config", "hypr")
+    if os.path.exists(os.path.join(hypr, "hyprland.lua")):
+        print("already migrated (hyprland.lua exists)")
+        return 0
+    if not os.path.exists(os.path.join(hypr, "hyprland.conf")):
+        print("nothing to migrate (no hyprland.conf)")
+        return 0
+    report = args.report or os.path.join(home, ".local", "state", "fedora-hypr", "hypr-lua-migration.report")
+    return Migration(home, args.fh_path, args.skel).run(report)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

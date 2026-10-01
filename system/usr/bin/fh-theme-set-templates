@@ -14,9 +14,24 @@ hex_to_rgb() {
   printf "%d,%d,%d" "0x${hex:0:2}" "0x${hex:2:2}" "0x${hex:4:2}"
 }
 
+# Emit the sed substitutions for one colors.toml entry. Lua templates need the
+# value escaped for a Lua string literal too: the extracted value can't contain a
+# quote, but a trailing backslash would escape the closing one and turn the rest
+# of the line into code.
+emit_substitutions() {
+  local key=$1 value=$2 raw=$3 strip=$4 rgb
+  printf 's|{{ %s }}|%s|g\n' "$key" "$value"       # {{ key }} -> value
+  printf 's|{{ %s_strip }}|%s|g\n' "$key" "$strip"  # {{ key_strip }} -> value without leading #
+  if [[ $raw =~ ^# ]]; then
+    rgb=$(hex_to_rgb "$raw")
+    echo "s|{{ ${key}_rgb }}|${rgb}|g"
+  fi
+}
+
 # Only generate dynamic templates for themes with a colors.toml definition
 if [[ -f $COLORS_FILE ]]; then
   sed_script=$(mktemp)
+  lua_sed_script=$(mktemp)
 
   while IFS='=' read -r key value; do
     key="${key//[\"\' ]/}"                # strip quotes and spaces from key
@@ -35,13 +50,19 @@ if [[ -f $COLORS_FILE ]]; then
     strip="${strip//|/\\|}"
     strip="${strip//&/\\&}"
 
-    printf 's|{{ %s }}|%s|g\n' "$key" "$value"       # {{ key }} -> value
-    printf 's|{{ %s_strip }}|%s|g\n' "$key" "$strip"  # {{ key_strip }} -> value without leading #
-    if [[ $raw =~ ^# ]]; then
-      rgb=$(hex_to_rgb "$raw")
-      echo "s|{{ ${key}_rgb }}|${rgb}|g"
-    fi
-  done <"$COLORS_FILE" >"$sed_script"
+    emit_substitutions "$key" "$value" "$raw" "$strip" >>"$sed_script"
+
+    # Same again with each backslash doubled for Lua, then escaped for sed.
+    lua_raw="${raw//\\/\\\\}"
+    lua_value="${lua_raw//\\/\\\\}"
+    lua_value="${lua_value//|/\\|}"
+    lua_value="${lua_value//&/\\&}"
+    lua_strip="${lua_raw#\#}"
+    lua_strip="${lua_strip//\\/\\\\}"
+    lua_strip="${lua_strip//|/\\|}"
+    lua_strip="${lua_strip//&/\\&}"
+    emit_substitutions "$key" "$lua_value" "$raw" "$lua_strip" >>"$lua_sed_script"
+  done <"$COLORS_FILE"
 
   shopt -s nullglob
 
@@ -52,9 +73,13 @@ if [[ -f $COLORS_FILE ]]; then
 
     # Don't overwrite configs already exists in the output directory (copied from theme specific folder)
     if [[ ! -f $output_path ]]; then
-      sed -f "$sed_script" "$tpl" >"$output_path"
+      if [[ $filename == *.lua ]]; then
+        sed -f "$lua_sed_script" "$tpl" >"$output_path"
+      else
+        sed -f "$sed_script" "$tpl" >"$output_path"
+      fi
     fi
   done
 
-  rm "$sed_script"
+  rm "$sed_script" "$lua_sed_script"
 fi

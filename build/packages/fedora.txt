@@ -15,6 +15,8 @@ qt5-qtwayland
 qt6-qtwayland
 xdg-terminal-exec
 # shell / wm helpers
+# lua: standalone interpreter for fh-menu-keybindings (reads the Lua Hyprland config) and tests
+lua
 waybar
 mako
 swaybg

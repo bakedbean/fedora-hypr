@@ -15,14 +15,19 @@ while [[ $# -gt 1 ]]; do
 done
 
 FLAG_NAME="$1"
-FLAG="$HOME/.local/state/fedora-hypr/toggles/hypr/$FLAG_NAME.conf"
-FLAG_SOURCE="$FH_PATH/default/hypr/toggles/$FLAG_NAME.conf"
+TOGGLES="$HOME/.local/state/fedora-hypr/toggles/hypr"
+FLAG="$TOGGLES/$FLAG_NAME.lua"
+# Toggles that carry a device or monitor name store it as data, not Lua
+# (fh-toggle-touchpad, fh-hyprland-monitor-internal{,-mirror}); see default/hypr/toggles.lua.
+NAME_FLAG="$TOGGLES/$FLAG_NAME.name"
+FLAG_SOURCE="$FH_PATH/default/hypr/toggles/$FLAG_NAME.lua"
 
-if [[ -f $FLAG ]]; then
-  rm $FLAG
+if [[ -f $FLAG || -f $NAME_FLAG ]]; then
+  rm -f "$FLAG" "$NAME_FLAG"
   [[ -n $DISABLED_NOTIFICATION ]] && notify-send -u low "$DISABLED_NOTIFICATION"
 elif [[ -f $FLAG_SOURCE ]]; then
-  cp $FLAG_SOURCE $FLAG
+  mkdir -p "$TOGGLES"
+  cp "$FLAG_SOURCE" "$FLAG"
   [[ -n $ENABLED_NOTIFICATION ]] && notify-send -u low "$ENABLED_NOTIFICATION"
 else
   echo "Flag not found: $FLAG_NAME"

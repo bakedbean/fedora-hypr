@@ -322,17 +322,28 @@ check bash -c "! grep -qi omarchy '$wb/style.css'"
 
 # hypr
 hy=$home/.config/hypr
-check bash -c "! grep -q 'omarchy-' '$hy/bindings.conf'"
-check bash -c "! grep -qi omarchy '$hy/bindings.conf'"
-check bash -c "! grep -qiE 'obsidian|typora|hey\.com|claudette|cliamp' '$hy/bindings.conf'"
-check grep -q 'radiobar toggle' "$hy/bindings.conf"
-check grep -qF 'fh-launch-or-focus signal "uwsm-app -- flatpak run org.signal.Signal"' "$hy/bindings.conf"
-check grep -qF 'ChatGPT' "$hy/bindings.conf"     # neighbouring webapp binds survive the filter
-check grep -qF 'uwsm-app -- flatpak run com.onepassword.OnePassword' "$hy/bindings.conf"
-check grep -qF 'fh-launch-webapp "https://chatgpt.com"' "$hy/bindings.conf"
-for f in input looknfeel monitors envs autostart; do check test -f "$hy/$f.conf"; done
-check bash -c "! grep -qi omarchy '$hy/looknfeel.conf'"
-check grep -q 'gaps_in = 5' "$hy/looknfeel.conf"
+check bash -c "! grep -q 'omarchy-' '$hy/bindings.lua'"
+check bash -c "! grep -qi omarchy '$hy/bindings.lua'"
+check bash -c "! grep -qiE 'obsidian|typora|hey\.com|claudette|cliamp' '$hy/bindings.lua'"
+check grep -qF 'hl.bind("SUPER + SHIFT + R", hl.dsp.exec_cmd("radiobar toggle"), { description = "RadioBar play/pause" })' "$hy/bindings.lua"
+check grep -qF 'fh-launch-or-focus signal \"uwsm-app -- flatpak run org.signal.Signal\"' "$hy/bindings.lua"
+check grep -qF 'ChatGPT' "$hy/bindings.lua"     # neighbouring webapp binds survive the filter
+check grep -qF 'uwsm-app -- flatpak run com.onepassword.OnePassword' "$hy/bindings.lua"
+check grep -qF 'fh-launch-webapp \"https://chatgpt.com\"' "$hy/bindings.lua"
+# $terminal is inlined (Lua has no hyprlang variables)
+check grep -qF 'hl.dsp.exec_cmd("uwsm-app -- xdg-terminal-exec --dir=\"$(fh-cmd-terminal-cwd)\"")' "$hy/bindings.lua"
+check bash -c "! grep -q '^-- FIXME' '$hy'/*.lua"
+for f in input looknfeel monitors envs autostart; do check test -f "$hy/$f.lua"; done
+check bash -c "! ls '$hy'/*.conf"              # nothing left in the old format
+check bash -c "! grep -qi omarchy '$hy/looknfeel.lua'"
+check grep -qF 'hl.config({ general = { gaps_in = 5 } })' "$hy/looknfeel.lua"
+# the converted files are valid Lua (loadfile only parses; nothing runs)
+if command -v luajit >/dev/null || command -v lua >/dev/null; then
+  lua_bin=$(command -v lua || command -v luajit)
+  for f in bindings input looknfeel monitors envs autostart; do
+    check "$lua_bin" -e "assert(loadfile('$hy/$f.lua'))"
+  done
+fi
 
 # idempotent: second run succeeds and leaves the same tree
 before=$(cd "$home" && find . | sort | md5sum)

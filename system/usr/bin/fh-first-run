@@ -20,6 +20,21 @@ if [[ ! -f $HOME/.config/fedora-hypr/branding/screensaver.txt ]]; then
   cp "$FH_PATH/logo.txt" "$HOME/.config/fedora-hypr/branding/screensaver.txt"
 fi
 
+# Once, after fh-migrate-hypr-lua moved this account's Hyprland config to Lua
+# (before this session started): say so, and point at anything left to review.
+report="$state/hypr-lua-migration.report"
+if [[ -f $report ]]; then
+  reviews=$(grep -c '^review ' "$report")
+  if ((reviews)); then
+    message="$reviews line(s) could not be converted and are commented out with FIXME. Details: $report.shown"
+  else
+    message="Your overrides are now ~/.config/hypr/*.lua; the old .conf files are kept as a backup."
+  fi
+  mv "$report" "$report.shown"
+  # Give mako a moment to come up alongside us.
+  (sleep 3 && notify-send -u normal "Hyprland config moved to Lua" "$message") &
+fi
+
 # After the theme step so the terminal is themed; nothing else waits on this. Both
 # setup steps run in one floating terminal, password first. The time zone prompt
 # repeats while the system is still on UTC and the user never confirmed a choice.

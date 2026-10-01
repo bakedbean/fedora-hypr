@@ -2,7 +2,9 @@
 # Adapted from third-party MIT-licensed code; see LICENSE-THIRD-PARTY in the source repo
 
 
-STATE_CONF="$HOME/.local/state/fedora-hypr/toggles/hypr/touchpad-disabled.conf"
+# The device name comes from a USB descriptor, so it is stored as data and read by
+# default/hypr/toggles.lua, never written into Lua.
+STATE_FILE="$HOME/.local/state/fedora-hypr/toggles/hypr/touchpad-disabled.name"
 
 device="$(fh-hw-touchpad)"
 
@@ -11,21 +13,32 @@ if [[ -z $device ]]; then
   exit 1
 fi
 
+# Lua string literal for hyprctl eval.
+lua_quote() {
+  local s=${1//\\/\\\\}
+  printf '"%s"' "${s//\"/\\\"}"
+}
+
+set_enabled() {
+  hyprctl eval "hl.device({ name = $(lua_quote "$device"), enabled = $1 })" >/dev/null 2>&1 ||
+    hyprctl keyword "device[$device]:enabled" "$1" >/dev/null
+}
+
 enable() {
-  hyprctl keyword "device[$device]:enabled" true >/dev/null
-  rm -f "$STATE_CONF"
+  set_enabled true
+  rm -f "$STATE_FILE"
   swayosd-client --custom-icon input-touchpad-symbolic --custom-message "Touchpad enabled"
 }
 
 disable() {
-  hyprctl keyword "device[$device]:enabled" false >/dev/null
-  mkdir -p "$(dirname "$STATE_CONF")"
-  printf 'device {\n    name = %s\n    enabled = false\n}\n' "$device" > "$STATE_CONF"
+  set_enabled false
+  mkdir -p "$(dirname "$STATE_FILE")"
+  printf '%s\n' "$device" >"$STATE_FILE"
   swayosd-client --custom-icon touchpad-disabled-symbolic --custom-message "Touchpad disabled"
 }
 
 case "${1:-toggle}" in
   on) enable ;;
   off) disable ;;
-  toggle) if [[ -f $STATE_CONF ]]; then enable; else disable; fi ;;
+  toggle) if [[ -f $STATE_FILE ]]; then enable; else disable; fi ;;
 esac

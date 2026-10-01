@@ -1,0 +1,2 @@
+-- This directory holds active runtime config toggles (managed by fh-hyprland-toggle).
+-- Do not remove this file.

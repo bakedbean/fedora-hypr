@@ -2,4 +2,5 @@
 # Adapted from third-party MIT-licensed code; see LICENSE-THIRD-PARTY in the source repo
 
 
-[[ -f "$HOME/.local/state/fedora-hypr/toggles/hypr/$1.conf" ]]
+toggles="$HOME/.local/state/fedora-hypr/toggles/hypr"
+[[ -f "$toggles/$1.lua" || -f "$toggles/$1.name" ]]

@@ -24,6 +24,13 @@ rm -rf "$next"; mkdir -p "$next"
 cp -r "$themes/$name/." "$next/" 2>/dev/null
 cp -r "$user_themes/$name/." "$next/" 2>/dev/null   # user overlay wins
 
+# A theme made for the old .conf config can ship its own hyprland.conf; convert it so
+# its colours still apply (unconverted lines become FIXME comments).
+if [[ -f $next/hyprland.conf && ! -f $next/hyprland.lua ]]; then
+  /usr/libexec/fedora-hypr/hypr-conf2lua convert "$next/hyprland.conf" >"$next/hyprland.lua" 2>/dev/null ||
+    rm -f "$next/hyprland.lua"
+fi
+
 fh-theme-set-templates
 
 rm -rf "$current"; mv "$next" "$current"
