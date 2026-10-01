@@ -1,0 +1,12 @@
+{
+  "workspace": {
+    "library": [
+      "/usr/share/hypr/stubs",
+      "/usr/share/fedora-hypr"
+    ],
+    "checkThirdParty": false
+  },
+  "diagnostics": {
+    "globals": ["hl", "fh", "fh_default_bindings"]
+  }
+}

@@ -1,0 +1,2 @@
+-- Extra autostart processes (run once per Hyprland start).
+-- fh.launch_on_start("my-service")
