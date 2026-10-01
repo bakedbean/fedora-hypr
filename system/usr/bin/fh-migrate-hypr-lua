@@ -1,0 +1,90 @@
+#!/usr/bin/env bash
+# One-time migration of ~/.config/hypr from the .conf (hyprlang) format to Lua.
+# Run by fh-migrate-hypr-lua.service before the compositor starts; safe to run
+# by hand. Does nothing once ~/.config/hypr/hyprland.lua exists.
+#
+# The old .conf files stay where they are (Hyprland ignores them once
+# hyprland.lua exists) and are copied to ~/.config/hypr/legacy-conf-<stamp>/, so
+# a `bootc rollback` to an image without Lua defaults can fall back to them
+# (hyprland.lua steps aside on its own in that case). The conversion itself is
+# /usr/libexec/fedora-hypr/hypr-conf2lua: lines it can't translate, and lines
+# Hyprland's verifier rejects, become commented FIXME lines, and the result is
+# only installed once `Hyprland --verify-config` accepts it. fh-first-run tells
+# the user what needs a look.
+set -uo pipefail
+: "${FH_PATH:=/usr/share/fedora-hypr}"
+
+hypr="$HOME/.config/hypr"
+state="$HOME/.local/state/fedora-hypr"
+toggles="$state/toggles/hypr"
+theme="$HOME/.config/fedora-hypr/current/theme"
+report="$state/hypr-lua-migration.report"
+
+[[ -f $hypr/hyprland.lua ]] && exit 0
+[[ -f $hypr/hyprland.conf ]] || exit 0
+
+# 1. Runtime toggles: Lua twins for the flag files, names as data for the rest.
+#    The .conf originals stay until the migration has succeeded.
+mkdir -p "$toggles"
+[[ -f $toggles/flags.lua ]] || cp "$FH_PATH/default/hypr/toggles/flags.lua" "$toggles/"
+unmigrated_toggles=()
+for conf in "$toggles"/*.conf; do
+  [[ -f $conf ]] || continue
+  name=$(basename "$conf" .conf)
+  case $name in
+    flags) ;;
+    touchpad-disabled)
+      sed -nE 's/^[[:space:]]*name[[:space:]]*=[[:space:]]*(.*[^[:space:]])[[:space:]]*$/\1/p' "$conf" | head -n1 >"$toggles/$name.name"
+      ;;
+    internal-monitor-disable)
+      sed -nE 's/^[[:space:]]*monitor[[:space:]]*=[[:space:]]*([^,[:space:]]+)[[:space:]]*,.*$/\1/p' "$conf" | head -n1 >"$toggles/$name.name"
+      ;;
+    internal-monitor-mirror)
+      # monitor=EXTERNAL, preferred, auto, 1, mirror, INTERNAL
+      sed -nE 's/^[[:space:]]*monitor[[:space:]]*=[[:space:]]*([^,[:space:]]+)[[:space:]]*,.*mirror[[:space:]]*,[[:space:]]*([^,[:space:]]+)[[:space:]]*$/\1 \2/p' "$conf" | head -n1 >"$toggles/$name.name"
+      ;;
+    *)
+      if [[ -f $FH_PATH/default/hypr/toggles/$name.lua ]]; then
+        cp "$FH_PATH/default/hypr/toggles/$name.lua" "$toggles/"
+      else
+        unmigrated_toggles+=("$name")
+      fi
+      ;;
+  esac
+  [[ -s $toggles/$name.name ]] || rm -f "$toggles/$name.name"
+done
+
+# 2. Theme: render the Lua templates for the current theme if it predates them.
+if [[ -f $theme/colors.toml && (! -f $theme/hyprland.lua || ! -f $theme/gum-env.lua) ]]; then
+  next="$HOME/.config/fedora-hypr/current/next-theme"
+  rm -rf "$next" && mkdir -p "$next" && cp "$theme/colors.toml" "$next/"
+  fh-theme-set-templates
+  for lua in "$next"/*.lua; do
+    [[ -f $lua && ! -e $theme/$(basename "$lua") ]] && cp "$lua" "$theme/"
+  done
+  rm -rf "$next"
+fi
+
+# 3. Convert, verify, install.
+/usr/libexec/fedora-hypr/hypr-conf2lua migrate --home "$HOME" --defaults "$FH_PATH" --report "$report"
+status=$?
+if ((status != 0)); then
+  echo "fh-migrate-hypr-lua: migration did not complete (status $status); keeping hyprland.conf" >&2
+  # Undo step 1's Lua toggles so a later retry starts from the same state.
+  rm -f "$toggles"/*.name
+  exit "$status"
+fi
+
+# 4. The legacy toggles now live in the backup; flags.conf stays so the old
+#    hyprland.conf's toggles glob still matches something after a rollback.
+backup=$(sed -n 's/^backup=//p' "$report")
+for conf in "$toggles"/*.conf; do
+  [[ -f $conf && $(basename "$conf") != flags.conf ]] || continue
+  if [[ -d $backup ]]; then
+    mkdir -p "$backup/toggles" && mv "$conf" "$backup/toggles/"
+  fi
+done
+for name in "${unmigrated_toggles[@]}"; do
+  echo "review toggle $name had no Lua equivalent; it is no longer applied" >>"$report"
+done
+exit 0

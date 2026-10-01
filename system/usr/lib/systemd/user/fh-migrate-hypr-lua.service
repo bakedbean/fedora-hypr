@@ -1,0 +1,15 @@
+# One-time move of an existing account's Hyprland config from hyprland.conf to
+# Lua. Runs before the compositor (uwsm's wayland-wm@ is ordered after
+# graphical-session-pre.target), so the first session after the update already
+# loads hyprland.lua. Enabled statically by the graphical-session-pre.target.wants
+# symlink beside it (no [Install] section: there is nothing for a user to enable).
+[Unit]
+Description=Migrate the Hyprland config from hyprland.conf to Lua
+Before=graphical-session-pre.target
+ConditionPathExists=%h/.config/hypr/hyprland.conf
+ConditionPathExists=!%h/.config/hypr/hyprland.lua
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/fh-migrate-hypr-lua
+TimeoutStartSec=120
