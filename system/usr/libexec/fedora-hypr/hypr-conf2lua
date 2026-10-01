@@ -29,6 +29,7 @@ import sys
 import tempfile
 
 STUBS = "/usr/share/hypr/stubs/hl.meta.lua"
+THEME_LUA = ".config/fedora-hypr/current/theme/hyprland.lua"
 FIXME = "-- FIXME(conf2lua)"
 
 # Variables the old image defaults defined (default/hypr/looknfeel.conf); user
@@ -810,8 +811,11 @@ class Migration:
             refs = re.findall(r"(/[^:\s']+\.lua):(\d+): ", line)
             if not refs:
                 continue
+            # The user's modules, and the current theme's hyprland.lua (a rendered copy,
+            # possibly converted from a theme's own hyprland.conf; fh-theme-set redoes it).
+            theme = os.path.join(os.path.dirname(os.path.dirname(stage_hypr)), THEME_LUA)
             ours = [(p, n) for p, n in refs
-                    if os.path.dirname(p) == stage_hypr and os.path.basename(p) != "hyprland.lua"]
+                    if (os.path.dirname(p) == stage_hypr and os.path.basename(p) != "hyprland.lua") or p == theme]
             if not ours:
                 foreign.append(line.strip())
                 continue
@@ -880,6 +884,12 @@ class Migration:
                     for number, line in enumerate(handle, 1):
                         if line.startswith(FIXME):
                             notes.append(f"~/.config/hypr/{name}:{number}: {line[len(FIXME) + 2:].strip()}")
+            theme = os.path.join(self.home, THEME_LUA)
+            if os.path.exists(theme):
+                with open(theme) as handle:
+                    for number, line in enumerate(handle, 1):
+                        if line.startswith(FIXME):
+                            notes.append(f"~/{THEME_LUA}:{number}: {line[len(FIXME) + 2:].strip()}")
             luarc = os.path.join(self.skel, ".luarc.json")
             if os.path.exists(luarc) and not os.path.exists(os.path.join(self.hypr, ".luarc.json")):
                 shutil.copy2(luarc, self.hypr)

@@ -59,4 +59,14 @@ test "$(lua -e "print((dofile('$cur/theme/probe.lua')))")" = 'x\'
 grep -qxF 'x\' "$cur/theme/probe.txt"
 rm -rf "$HOME/.config/fedora-hypr/themes/tokyo-night" "$HOME/.config/fedora-hypr/themed"
 
+# A user theme made for the old .conf config ships hyprland.conf: it is converted to
+# hyprland.lua (variables inlined, gradient as a table), not replaced by the template.
+mkdir -p "$HOME/.config/fedora-hypr/themes/tokyo-night"
+printf '%s\n' '$rose = 0xffebbcba' '$pine = 0xff31748f' 'general {' '    col.active_border = $rose $pine 90deg' '}' \
+  > "$HOME/.config/fedora-hypr/themes/tokyo-night/hyprland.conf"
+fh-theme-set tokyo-night
+grep -qF 'active_border = { colors = { "0xffebbcba", "0xff31748f" }, angle = 90 }' "$cur/theme/hyprland.lua"
+! grep -q 'accent' "$cur/theme/hyprland.lua"
+rm -rf "$HOME/.config/fedora-hypr/themes/tokyo-night"
+
 echo "theme_test: OK"

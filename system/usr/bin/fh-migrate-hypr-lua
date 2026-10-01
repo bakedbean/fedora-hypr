@@ -54,7 +54,13 @@ for conf in "$toggles"/*.conf; do
   [[ -s $toggles/$name.name ]] || rm -f "$toggles/$name.name"
 done
 
-# 2. Theme: render the Lua templates for the current theme if it predates them.
+# 2. Theme: give the current theme its Lua files. Its hyprland.conf (the old
+#    template's output, or a user theme's own) is converted like fh-theme-set does;
+#    templates fill in whatever is still missing.
+if [[ -f $theme/hyprland.conf && ! -f $theme/hyprland.lua ]]; then
+  /usr/libexec/fedora-hypr/hypr-conf2lua convert "$theme/hyprland.conf" >"$theme/hyprland.lua" 2>/dev/null ||
+    rm -f "$theme/hyprland.lua"
+fi
 if [[ -f $theme/colors.toml && (! -f $theme/hyprland.lua || ! -f $theme/gum-env.lua) ]]; then
   next="$HOME/.config/fedora-hypr/current/next-theme"
   rm -rf "$next" && mkdir -p "$next" && cp "$theme/colors.toml" "$next/"
