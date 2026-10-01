@@ -40,7 +40,7 @@ else
 fi
 
 if [[ $WINDOW_STYLE == "float" ]]; then
-  APP_CLASS="TUI.float"   # tagged floating-window in default/hypr/apps/system.conf
+  APP_CLASS="TUI.float"   # tagged floating-window in default/hypr/apps/system.lua
 else
   APP_CLASS="TUI.tile"
 fi

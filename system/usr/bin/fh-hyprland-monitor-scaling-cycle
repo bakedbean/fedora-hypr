@@ -32,15 +32,17 @@ fi
 
 NEW_SCALE=${SCALES[$NEW_IDX]}
 
-hyprctl keyword monitor "$ACTIVE_MONITOR,${WIDTH}x${HEIGHT}@${REFRESH_RATE},auto,$NEW_SCALE"
+hyprctl eval "hl.monitor({ output = \"$ACTIVE_MONITOR\", mode = \"${WIDTH}x${HEIGHT}@${REFRESH_RATE}\", position = \"auto\", scale = $NEW_SCALE })" >/dev/null 2>&1 ||
+  hyprctl keyword monitor "$ACTIVE_MONITOR,${WIDTH}x${HEIGHT}@${REFRESH_RATE},auto,$NEW_SCALE"
 
-# Persist to monitors.conf if the user has a single generic catch-all line
-# (ignoring disabled monitors), so the scale survives reboots.
-MONITOR_CONF="$HOME/.config/hypr/monitors.conf"
-if [[ -f $MONITOR_CONF ]]; then
-  mapfile -t ACTIVE_LINES < <(grep -E '^[[:space:]]*monitor=' "$MONITOR_CONF" | grep -vE 'disable[[:space:]]*$')
-  if [[ ${#ACTIVE_LINES[@]} -eq 1 ]] && [[ "${ACTIVE_LINES[0]}" =~ ^monitor=,preferred,auto, ]]; then
-    sed -i -E "s|^(monitor=,preferred,auto,).*|\\1${NEW_SCALE}|" "$MONITOR_CONF"
+# Persist to monitors.lua if the user has a single generic catch-all monitor
+# (ignoring disabled ones), so the scale survives reboots.
+MONITORS_LUA="$HOME/.config/hypr/monitors.lua"
+CATCH_ALL='^[[:space:]]*hl\.monitor\(\{ output = "", mode = "preferred", position = "auto", scale = '
+if [[ -f $MONITORS_LUA ]]; then
+  mapfile -t ACTIVE_LINES < <(grep -E '^[[:space:]]*hl\.monitor\(' "$MONITORS_LUA" | grep -vE 'disabled[[:space:]]*=[[:space:]]*true')
+  if [[ ${#ACTIVE_LINES[@]} -eq 1 ]] && [[ ${ACTIVE_LINES[0]} =~ $CATCH_ALL ]]; then
+    sed -i -E "s/^([[:space:]]*hl\.monitor\(\{ output = \"\", mode = \"preferred\", position = \"auto\", scale = )[^ ]+( \}\))/\1${NEW_SCALE}\2/" "$MONITORS_LUA"
   fi
 fi
 

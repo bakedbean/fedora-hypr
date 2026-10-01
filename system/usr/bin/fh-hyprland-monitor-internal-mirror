@@ -3,7 +3,8 @@
 
 
 TOGGLE="internal-monitor-mirror"
-TOGGLE_FLAG="$HOME/.local/state/fedora-hypr/toggles/hypr/$TOGGLE.conf"
+# Monitor names are stored as data; default/hypr/toggles.lua turns this into hl.monitor().
+TOGGLE_FLAG="$HOME/.local/state/fedora-hypr/toggles/hypr/$TOGGLE.name"
 DISABLE_TOGGLE="internal-monitor-disable"
 
 # Get names dynamically
@@ -27,7 +28,8 @@ enable() {
   fi
 
   if fh-hyprland-toggle-disabled "$TOGGLE"; then
-    echo "monitor=$EXTERNAL, preferred, auto, 1, mirror, $INTERNAL" > "$TOGGLE_FLAG"
+    mkdir -p "$(dirname "$TOGGLE_FLAG")"
+    echo "$EXTERNAL $INTERNAL" >"$TOGGLE_FLAG"
     notify-send -u low "󰍹    Mirroring enabled ($EXTERNAL)"
     hyprctl reload
   fi
