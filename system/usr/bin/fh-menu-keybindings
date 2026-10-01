@@ -458,6 +458,10 @@ keybindings_cache_key() {
     printf 'v11\n'
     hyprctl devices 2>/dev/null | grep -F 'active keymap:'
     hyprctl binds 2>/dev/null
+    # A Lua bind's command is read from the source, not from hyprctl binds (which
+    # only says __lua): editing a command alone must still miss the cache.
+    cat "$HOME"/.config/hypr/*.lua "${FH_PATH:-/usr/share/fedora-hypr}"/default/hypr/*.lua \
+      "${FH_PATH:-/usr/share/fedora-hypr}"/default/hypr/bindings/*.lua 2>/dev/null
   } | sha256sum | awk '{ print $1 }'
 }
 

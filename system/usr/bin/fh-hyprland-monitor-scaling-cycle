@@ -32,7 +32,14 @@ fi
 
 NEW_SCALE=${SCALES[$NEW_IDX]}
 
-hyprctl eval "hl.monitor({ output = \"$ACTIVE_MONITOR\", mode = \"${WIDTH}x${HEIGHT}@${REFRESH_RATE}\", position = \"auto\", scale = $NEW_SCALE })" >/dev/null 2>&1 ||
+# Lua string literal for hyprctl dispatch/eval (monitor names come from the compositor,
+# but nothing here should rely on them being free of quotes or backslashes).
+lua_quote() {
+  local s=${1//\\/\\\\}
+  printf '"%s"' "${s//\"/\\\"}"
+}
+
+hyprctl eval "hl.monitor({ output = $(lua_quote "$ACTIVE_MONITOR"), mode = $(lua_quote "${WIDTH}x${HEIGHT}@${REFRESH_RATE}"), position = \"auto\", scale = $NEW_SCALE })" >/dev/null 2>&1 ||
   hyprctl keyword monitor "$ACTIVE_MONITOR,${WIDTH}x${HEIGHT}@${REFRESH_RATE},auto,$NEW_SCALE"
 
 # Persist to monitors.lua if the user has a single generic catch-all monitor

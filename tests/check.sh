@@ -180,6 +180,8 @@ check grep -q -- '--dmenu --maxheight "$menu_height" --minheight "$menu_height"'
 # hyprland.lua with the standalone interpreter (its Lua harness must keep working)
 check command -v lua
 check bash -c 'grep -q "command -v lua" /usr/bin/fh-menu-keybindings && grep -q "__fh_dispatcher" /usr/bin/fh-menu-keybindings'
+# its cache is keyed on the Lua sources too: `hyprctl binds` shows only __lua for a command change
+check grep -qF '"$HOME"/.config/hypr/*.lua' /usr/bin/fh-menu-keybindings
 check grep -q 'FH_PATH:=/usr/share/fedora-hypr' /usr/bin/fh-hyprland-toggle
 check bash -c 'grep -q fh-theme-set-gnome /usr/bin/fh-theme-set && grep -q fh-restart-btop /usr/bin/fh-theme-set'
 check test -f /usr/share/fedora-hypr/themes/white/light.mode
