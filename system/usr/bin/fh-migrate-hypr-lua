@@ -11,6 +11,11 @@
 # Hyprland's verifier rejects, become commented FIXME lines, and the result is
 # only installed once `Hyprland --verify-config` accepts it. fh-first-run tells
 # the user what needs a look.
+#
+# If the conversion fails anyway, staying on hyprland.conf is not an option: it
+# sources the image's .conf defaults, which no longer exist. The skel Lua config
+# (image defaults, empty overrides) is installed instead and the report says so;
+# the .conf files are untouched for porting by hand.
 set -uo pipefail
 : "${FH_PATH:=/usr/share/fedora-hypr}"
 
@@ -25,12 +30,19 @@ report="$state/hypr-lua-migration.report"
 
 # 1. Runtime toggles: Lua twins for the flag files, names as data for the rest.
 #    The .conf originals stay until the migration has succeeded.
+# Every file steps 1-2 create is recorded, so a failed conversion can remove them.
+created=()
+create() { [[ -e $1 ]] || created+=("$1"); }
+
 mkdir -p "$toggles"
+create "$toggles/flags.lua"
 [[ -f $toggles/flags.lua ]] || cp "$FH_PATH/default/hypr/toggles/flags.lua" "$toggles/"
 unmigrated_toggles=()
 for conf in "$toggles"/*.conf; do
   [[ -f $conf ]] || continue
   name=$(basename "$conf" .conf)
+  create "$toggles/$name.name"
+  create "$toggles/$name.lua"
   case $name in
     flags) ;;
     touchpad-disabled)
@@ -57,6 +69,8 @@ done
 # 2. Theme: give the current theme its Lua files. Its hyprland.conf (the old
 #    template's output, or a user theme's own) is converted like fh-theme-set does;
 #    templates fill in whatever is still missing.
+create "$theme/hyprland.lua"
+create "$theme/gum-env.lua"
 if [[ -f $theme/hyprland.conf && ! -f $theme/hyprland.lua ]]; then
   /usr/libexec/fedora-hypr/hypr-conf2lua convert "$theme/hyprland.conf" >"$theme/hyprland.lua" 2>/dev/null ||
     rm -f "$theme/hyprland.lua"
@@ -75,10 +89,21 @@ fi
 /usr/libexec/fedora-hypr/hypr-conf2lua migrate --home "$HOME" --defaults "$FH_PATH" --report "$report"
 status=$?
 if ((status != 0)); then
-  echo "fh-migrate-hypr-lua: migration did not complete (status $status); keeping hyprland.conf" >&2
-  # Undo step 1's Lua toggles so a later retry starts from the same state.
-  rm -f "$toggles"/*.name
-  exit "$status"
+  echo "fh-migrate-hypr-lua: conversion failed (status $status); installing the default Lua config" >&2
+  rm -f "${created[@]}"
+  # The skel config: image defaults plus empty overrides, so the session works.
+  # Existing .lua files are left alone; hyprland.lua goes in last.
+  for lua in /etc/skel/.config/hypr/*.lua /etc/skel/.config/hypr/.luarc.json; do
+    [[ $(basename "$lua") == hyprland.lua || -e $hypr/$(basename "$lua") ]] || cp "$lua" "$hypr/"
+  done
+  [[ -f $toggles/flags.lua ]] || cp "$FH_PATH/default/hypr/toggles/flags.lua" "$toggles/" 2>/dev/null
+  cp /etc/skel/.config/hypr/hyprland.lua "$hypr/.hyprland.lua.tmp" && mv "$hypr/.hyprland.lua.tmp" "$hypr/hyprland.lua"
+  mkdir -p "$(dirname "$report")"
+  {
+    echo "failed=$status"
+    echo "review your ~/.config/hypr/*.conf overrides could not be converted automatically; the default config is in use and the .conf files are unchanged (see journalctl --user -u fh-migrate-hypr-lua)"
+  } >"$report"
+  exit 0
 fi
 
 # 4. The legacy toggles now live in the backup; flags.conf stays so the old

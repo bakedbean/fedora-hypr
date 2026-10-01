@@ -124,7 +124,8 @@ automatically, before the first session after the update: your `.conf` overrides
 `.lua` files above and checked with Hyprland's own verifier; anything that couldn't be converted is
 left as a `-- FIXME(conf2lua)` comment and listed in a notification (details in
 `~/.local/state/fedora-hypr/hypr-lua-migration.report.shown`). The `.conf` files stay in place and are
-also copied to `~/.config/hypr/legacy-conf-<date>/`. If you `bootc rollback` to an image from before
+also copied to `~/.config/hypr/legacy-conf-<date>/`. If the conversion fails outright you get the
+default config and a notification saying so; port the `.conf` files by hand. If you `bootc rollback` to an image from before
 the change, `hyprland.lua` steps aside on its own (renamed `hyprland.lua.rolled-back`) and the next
 login uses the old `hyprland.conf` again.
 

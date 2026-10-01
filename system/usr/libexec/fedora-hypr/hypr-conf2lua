@@ -247,6 +247,9 @@ class Converter:
         # Callback: absolute path -> ("require", module) | ("skip", why) | None
         self.module_for_source = module_for_source
         self.fixmes = 0
+        # hyprlang's current submap persists across lines and sourced files until
+        # `submap = reset`; a bind inside one must never become a global bind.
+        self.submap = None
 
     # -- helpers ----------------------------------------------------------
 
@@ -594,6 +597,14 @@ class Converter:
                 device["__lines__"].append(line)
                 continue
 
+            if key.lower() == "submap":
+                self.submap = None if value.strip().lower() == "reset" else value.strip()
+                out.append(self.fixme("submaps need a manual port (hl.define_submap)", line))
+                continue
+            if self.submap is not None:
+                out.append(self.fixme(f"inside submap '{self.submap}', which needs a manual port", line))
+                continue
+
             statement = self.statement(key, value, line, sections)
             if comment and not statement.startswith("--"):
                 statement += "  -- " + comment
@@ -635,7 +646,7 @@ class Converter:
             return self.fixme("exec runs on every reload; use hl.on(\"config.reloaded\", ...) or exec-once", line)
         if k == "source":
             return self.source(value, line)
-        if k in ("windowrulev2", "layerrulev2", "plugin", "permission", "submap"):
+        if k in ("windowrulev2", "layerrulev2", "plugin", "permission"):
             return self.fixme(f"'{k}' needs a manual port", line)
         path = sections + [p for p in re.split(r"[:.]", key) if p]
         if not path or not all(re.match(r"^[A-Za-z0-9_]+$", p) for p in path):
@@ -725,31 +736,45 @@ class Migration:
         self.modules[stem] = header + body
 
     def plan(self):
-        custom = []
+        """Walk hyprland.conf in order. Sourced ~/.config/hypr files become modules;
+        statements written in hyprland.conf itself become "inline" modules placed
+        where they stood, so later lines still override earlier ones."""
+        taken = {module_name(n[:-5]) for n in os.listdir(self.hypr) if n.endswith(".conf")}
+        chunk = []
+
+        def flush():
+            if not chunk:
+                return
+            body = self.conv.convert_lines(chunk)
+            chunk.clear()
+            if not any(l.strip() and (not l.startswith("--") or l.startswith(FIXME)) for l in body):
+                return
+            number, stem = 1, "hyprland-inline"
+            while stem in taken or stem in self.modules:
+                number += 1
+                stem = f"hyprland-inline-{number}"
+            self.modules[stem] = [
+                "-- Statements written directly in hyprland.conf, converted by the fedora-hypr Lua migration.",
+                "",
+            ] + body
+            self.order.append(stem)
+
         for line in read_lines(os.path.join(self.hypr, "hyprland.conf")):
             code, _ = strip_comment(line)
-            # Variables apply to every file sourced after them.
-            match = re.match(r"^\s*\$([A-Za-z0-9_]+)\s*=\s*(.*)$", code)
-            if match:
-                self.conv.vars[match.group(1)] = self.conv.expand(match.group(2).strip())
             match = re.match(r"^\s*source\s*=\s*(.+)$", code)
             if match:
-                result = self.module_for_source(self.conv.expand_path(self.conv.expand(match.group(1))))
+                path = self.conv.expand_path(self.conv.expand(match.group(1)))
+                flush()
+                result = self.module_for_source(path)
                 if result and result[0] == "require":
                     stem = result[1][len("hypr.") :]
                     if stem not in self.order:
                         self.order.append(stem)
                 elif result is None:
-                    custom.append(line)
+                    chunk.append(line)
                 continue
-            custom.append(line)
-        body = self.conv.convert_lines(custom)
-        if any(l.strip() and (not l.startswith("--") or l.startswith(FIXME)) for l in body):
-            self.modules["custom"] = [
-                "-- Statements that lived directly in hyprland.conf, converted by the fedora-hypr Lua migration.",
-                "",
-            ] + body
-            self.order.append("custom")
+            chunk.append(line)
+        flush()
 
     def entrypoint(self):
         template = read_lines(os.path.join(self.skel, "hyprland.lua"))
@@ -773,12 +798,16 @@ class Migration:
                 handle.write("\n".join(lines).rstrip("\n") + "\n")
         with open(os.path.join(hypr, "hyprland.lua"), "w") as handle:
             handle.write(self.entrypoint())
-        for rel in (".config/fedora-hypr", ".local/state/fedora-hypr"):
-            target = os.path.join(self.home, rel)
-            link = os.path.join(stage_home, rel)
-            os.makedirs(os.path.dirname(link), exist_ok=True)
-            if os.path.exists(target):
-                os.symlink(target, link)
+        # The theme is copied, not linked: verification may comment lines out of its
+        # hyprland.lua, and a migration that fails must leave the real one alone.
+        theme = os.path.join(self.home, ".config", "fedora-hypr", "current", "theme")
+        if os.path.isdir(theme):
+            shutil.copytree(theme, os.path.join(stage_home, ".config", "fedora-hypr", "current", "theme"), symlinks=True)
+        # Toggles are only read.
+        state = os.path.join(self.home, ".local", "state", "fedora-hypr")
+        if os.path.exists(state):
+            os.makedirs(os.path.join(stage_home, ".local", "state"), exist_ok=True)
+            os.symlink(state, os.path.join(stage_home, ".local", "state", "fedora-hypr"))
         return hypr
 
     def verify(self, stage_home):
@@ -843,7 +872,9 @@ class Migration:
         stage_home = tempfile.mkdtemp(prefix="fh-hypr-lua-")
         try:
             stage_hypr = self.write_stage(stage_home)
-            for _ in range(200):
+            # Each pass takes well under a second; the cap keeps the whole run
+            # inside the unit's TimeoutStartSec even for a very broken config.
+            for _ in range(100):
                 code, output = self.verify(stage_home)
                 if code == 0 and not os.path.exists(os.path.join(stage_hypr, "hyprland.lua")):
                     sys.stderr.write("hyprland.lua stepped aside during verification; not migrating\n")
@@ -867,6 +898,9 @@ class Migration:
         stamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
         backup = os.path.join(self.hypr, "legacy-conf-" + stamp)
         installed, displaced, notes = [], [], []
+        theme = os.path.join(self.home, THEME_LUA)
+        staged_theme = os.path.join(os.path.dirname(os.path.dirname(stage_hypr)), THEME_LUA)
+        theme_before = None
         try:
             os.makedirs(backup)
             for name in sorted(os.listdir(self.hypr)):
@@ -884,7 +918,11 @@ class Migration:
                     for number, line in enumerate(handle, 1):
                         if line.startswith(FIXME):
                             notes.append(f"~/.config/hypr/{name}:{number}: {line[len(FIXME) + 2:].strip()}")
-            theme = os.path.join(self.home, THEME_LUA)
+            if os.path.exists(staged_theme):
+                if os.path.exists(theme):
+                    with open(theme) as handle:
+                        theme_before = handle.read()
+                shutil.copyfile(staged_theme, theme)
             if os.path.exists(theme):
                 with open(theme) as handle:
                     for number, line in enumerate(handle, 1):
@@ -894,10 +932,22 @@ class Migration:
             if os.path.exists(luarc) and not os.path.exists(os.path.join(self.hypr, ".luarc.json")):
                 shutil.copy2(luarc, self.hypr)
                 installed.append(os.path.join(self.hypr, ".luarc.json"))
+            # The report too, before the switch: after it nothing may fail.
+            os.makedirs(os.path.dirname(report_path), exist_ok=True)
+            report_tmp = report_path + ".tmp"
+            with open(report_tmp, "w") as handle:
+                handle.write(f"backup={backup}\n")
+                handle.write("modules=" + " ".join(self.order) + "\n")
+                for note in notes:
+                    handle.write("review " + note + "\n")
+            installed.append(report_tmp)
             # hyprland.lua last: its presence is what switches Hyprland to Lua.
             tmp = os.path.join(self.hypr, ".hyprland.lua.tmp")
             shutil.copy2(os.path.join(stage_hypr, "hyprland.lua"), tmp)
-            os.rename(tmp, os.path.join(self.hypr, "hyprland.lua"))
+            os.rename(report_tmp, report_path)
+            installed.append(report_path)
+            installed.append(tmp)
+            os.rename(tmp, os.path.join(self.hypr, "hyprland.lua"))  # the switch; nothing after it
         except OSError as error:
             # Before the switch nothing is in effect yet: put everything back.
             for path in installed:
@@ -905,16 +955,13 @@ class Migration:
                     os.remove(path)
             for path in displaced:
                 os.rename(f"{path}.pre-migration-{stamp}", path)
+            if theme_before is not None:
+                with open(theme, "w") as handle:
+                    handle.write(theme_before)
             shutil.rmtree(backup, ignore_errors=True)
             sys.stderr.write(f"install failed, nothing changed: {error}\n")
             return 1
 
-        os.makedirs(os.path.dirname(report_path), exist_ok=True)
-        with open(report_path, "w") as handle:
-            handle.write(f"backup={backup}\n")
-            handle.write("modules=" + " ".join(self.order) + "\n")
-            for note in notes:
-                handle.write("review " + note + "\n")
         print(f"migrated {', '.join(self.order) or 'nothing'}; {len(notes)} line(s) to review; backup in {backup}")
         return 0
 

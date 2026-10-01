@@ -185,17 +185,23 @@ Migration of existing accounts (`fh-migrate-hypr-lua`, run by `fh-migrate-hypr-l
 1. toggles: `<flag>.conf` → its `.lua` twin; touchpad/monitor ones → `.name` data files;
 2. the current theme gets `hyprland.lua`/`gum-env.lua` rendered from its `colors.toml`;
 3. `hypr-conf2lua migrate` walks `hyprland.conf` in order (variables carry across files, as in hyprlang),
-   converts each sourced `~/.config/hypr/*.conf` into a module of the same name (statements written
-   straight in hyprland.conf go to `custom.lua`), types values from `/usr/share/hypr/stubs/hl.meta.lua`,
-   and verifies the result in a staging HOME; each line Hyprland rejects becomes a
-   `-- FIXME(conf2lua): …` comment and it verifies again until the config loads. Untranslatable lines
-   (unknown dispatchers, `exec =`, `windowrulev2`, …) are FIXME comments from the start. Nothing is
-   installed unless the defaults themselves verify; `hyprland.lua` is written last;
+   converts each sourced `~/.config/hypr/*.conf` into a module of the same name; statements written
+   straight in hyprland.conf become `hyprland-inline[-N].lua` modules placed where they stood (names
+   never collide with a user file), so precedence is unchanged. Values are typed from
+   `/usr/share/hypr/stubs/hl.meta.lua`. It verifies in a staging HOME (the theme is a *copy* there);
+   each line Hyprland rejects becomes a `-- FIXME(conf2lua): …` comment and it verifies again until the
+   config loads. Untranslatable lines (unknown dispatchers, `exec =`, `windowrulev2`, and everything
+   inside a `submap` until `submap = reset`, so no submap bind turns global) are FIXME comments from the
+   start. The report and the modules are written first, `hyprland.lua` last, and an install error
+   before that switch undoes the rest;
 4. the `.conf` files stay where they are (Hyprland ignores them once hyprland.lua exists) and are
    copied, with the old toggles, to `~/.config/hypr/legacy-conf-<stamp>/`; the report
    (`~/.local/state/fedora-hypr/hypr-lua-migration.report`) lists what to review and `fh-first-run`
    shows it once as a notification.
-Re-running after a failure is safe; a failed run changes nothing. `tools/migrate-home.sh` uses the same
+If the conversion fails (e.g. the defaults themselves don't verify), staying on `hyprland.conf` is no
+option — it sources the image's `.conf` defaults, which are gone — so the wrapper removes what it
+created and installs the skel Lua config instead (defaults + empty overrides), leaving every existing
+file byte-for-byte unchanged and saying so in the report. `tools/migrate-home.sh` uses the same
 converter (`hypr-conf2lua convert`) without verification (it runs on the old host).
 
 ## Updates

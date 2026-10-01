@@ -12,4 +12,4 @@ ConditionPathExists=!%h/.config/hypr/hyprland.lua
 [Service]
 Type=oneshot
 ExecStart=/usr/bin/fh-migrate-hypr-lua
-TimeoutStartSec=120
+TimeoutStartSec=300

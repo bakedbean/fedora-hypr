@@ -108,6 +108,7 @@ git_conf=$(cd "$h/.config/hypr" && sha256sum ./*.conf)
 out=$(as_user "$h" 'fh-migrate-hypr-lua 2>&1')
 rc=$?
 hy=$h/.config/hypr
+report=$h/.local/state/fedora-hypr/hypr-lua-migration.report
 if ((rc == 0)) && [[ -f $hy/hyprland.lua ]]; then pass "fh-migrate-hypr-lua migrates the fixture account"; else flunk "migration rc=$rc"; echo "$out"; fi
 if verify_ok "$h"; then pass "migrated config loads"; else flunk "migrated config does not load"; verify "$h"; fi
 check test "$(cd "$hy" && sha256sum ./*.conf)" = "$git_conf"           # .conf files untouched
@@ -115,9 +116,11 @@ check bash -c "ls -d '$hy'/legacy-conf-*/ | grep -q . && test -f '$hy'/legacy-co
 check test -f "$h/.config/fedora-hypr/current/theme/hyprland.lua"      # theme re-rendered for Lua
 check test -f "$h/.config/fedora-hypr/current/theme/gum-env.lua"
 check test -f "$hy/.luarc.json"
-for m in monitors input bindings envs looknfeel autostart custom; do
-  check grep -qx "user(\"hypr.$m\")" "$hy/hyprland.lua"
-done
+# every module, in hyprland.conf's order: statements written between two sources
+# land between them (later lines still override earlier ones)
+order=$(sed -n 's/^user("hypr\.\(.*\)")$/\1/p' "$hy/hyprland.lua" | tr '\n' ' ')
+check test "$order" = "monitors input bindings envs hyprland-inline looknfeel autostart hyprland-inline-2 "
+check grep -qF 'hl.env("FIXTURE_EARLY", "1")' "$hy/hyprland-inline.lua"
 check grep -q 'require("hypr.extra")' "$hy/bindings.lua"                 # nested source -> require
 check grep -qF 'hl.window_rule({ match = { class = "^(org.example.app)$" }, float = true, size = "800 600" })' "$hy/extra.lua"
 check grep -qF 'hl.workspace_rule({ workspace = "5", layout = "scrolling" })' "$hy/extra.lua"
@@ -133,9 +136,12 @@ check grep -qF 'hl.on("hyprland.start", function() hl.exec_cmd("uwsm-app -- radi
 check grep -qF '{ colors = { "rgba(ff0000ee)", "rgba(00ff00ee)" }, angle = 90 }' "$hy/looknfeel.lua"
 check grep -qF 'hl.curve("myCurve"' "$hy/looknfeel.lua"
 check grep -qF 'hl.device({ name = "some-mouse", sensitivity = -0.5 })' "$hy/input.lua"
-check grep -qF 'hl.env("FIXTURE_INLINE", "1")' "$hy/custom.lua"
+check grep -qF 'hl.env("FIXTURE_INLINE", "1")' "$hy/hyprland-inline-2.lua"
+# a submap's binds stay out of the global keymap (all FIXME) and binds after `submap = reset` are back
+check bash -c "! grep -E '^hl\.bind\(\"(H|escape)\"' '$hy/bindings.lua'"
+check grep -qF "inside submap 'resize'" "$report"
+check grep -qF 'hl.bind("SUPER + CTRL + J", hl.dsp.exec_cmd("after-submap"), { description = "After the submap" })' "$hy/bindings.lua"
 # what can't be converted (or Hyprland rejects) is a FIXME comment, listed in the report
-report=$h/.local/state/fedora-hypr/hypr-lua-migration.report
 for pattern in "pass, class" "someunknowndispatcher" "exec = echo every-reload" "no_such_option"; do
   check grep -qF "$pattern" "$report"
 done
@@ -157,7 +163,7 @@ check test "$(ls -d "$hy"/legacy-conf-* | wc -l)" = "$before"
 h=$(new_home)
 mkdir -p "$h/.config/hypr" "$h/.local/state/fedora-hypr/toggles/hypr"
 for f in autostart bindings envs hypridle hyprland hyprlock input looknfeel monitors; do
-  sed '/^# --- fixture/,$d' "$FIXTURE/.config/hypr/$f.conf" >"$h/.config/hypr/$f.conf"
+  sed '/(fixture)/d; /^# --- fixture/,$d' "$FIXTURE/.config/hypr/$f.conf" >"$h/.config/hypr/$f.conf"
 done
 chown -R "$U:$U" "$h"
 if as_user "$h" 'fh-migrate-hypr-lua >/dev/null 2>&1' && verify_ok "$h" &&
@@ -167,20 +173,42 @@ else
   flunk "old skel account migration"; cat "$h/.local/state/fedora-hypr/hypr-lua-migration.report"
 fi
 
-# when the result can't be made to load, nothing changes: hyprland.conf stays in charge
+# generated module names never collide with a user's own file: a sourced
+# hyprland-inline.conf keeps its name, the inline chunks around it take the next free ones
+h=$(new_home)
+mkdir -p "$h/.config/hypr"
+printf '%s\n' 'env = INLINE_A,1' 'source = ~/.config/hypr/hyprland-inline.conf' 'env = INLINE_B,1' >"$h/.config/hypr/hyprland.conf"
+echo 'env = FROM_USER_FILE,1' >"$h/.config/hypr/hyprland-inline.conf"
+chown -R "$U:$U" "$h"
+check as_user "$h" fh-migrate-hypr-lua
+check grep -qF 'hl.env("FROM_USER_FILE", "1")' "$h/.config/hypr/hyprland-inline.lua"
+check grep -qF 'hl.env("INLINE_A", "1")' "$h/.config/hypr/hyprland-inline-2.lua"
+check grep -qF 'hl.env("INLINE_B", "1")' "$h/.config/hypr/hyprland-inline-3.lua"
+check test "$(sed -n 's/^user("hypr\.\(.*\)")$/\1/p' "$h/.config/hypr/hyprland.lua" | tr '\n' ' ')" = "hyprland-inline-2 hyprland-inline hyprland-inline-3 "
+if verify_ok "$h"; then pass "collision-free inline modules load"; else flunk "collision case"; verify "$h"; fi
+
+# When the conversion fails, the old hyprland.conf can't stay in charge (it sources
+# the image's .conf defaults, which are gone): the skel Lua config is installed,
+# and every file that was there before is byte-for-byte unchanged -- including a
+# hand-written theme hyprland.lua with a line the verifier rejects.
 broken=$(mktemp -d)
 cp -r "$FH/." "$broken/"
 chmod 755 "$broken"
 echo 'hl.this_does_not_exist()' >>"$broken/default/hypr/envs.lua"
 h=$(new_home fixture)
-if as_user "$h" 'fh-migrate-hypr-lua >/dev/null 2>&1' FH_PATH="$broken"; then
-  flunk "migration claimed success against broken defaults"
-else
-  pass "migration refuses when the defaults themselves don't load"
-fi
-check test ! -e "$h/.config/hypr/hyprland.lua"
-check test -f "$h/.local/state/fedora-hypr/toggles/hypr/window-no-gaps.conf"
-check bash -c "! ls '$h'/.local/state/fedora-hypr/toggles/hypr/*.name"
+mkdir -p "$h/.config/fedora-hypr/current/theme"
+printf '%s\n' 'hl.config({ general = { no_such_theme_option = 1 } })' >"$h/.config/fedora-hypr/current/theme/hyprland.lua"
+chown -R "$U:$U" "$h"
+snapshot() { (cd "$h" && find . -type f -exec sha256sum {} + | LC_ALL=C sort); }
+before=$(snapshot)
+check as_user "$h" 'fh-migrate-hypr-lua >/dev/null 2>&1' FH_PATH="$broken"
+after=$(snapshot)
+changed=$(LC_ALL=C comm -23 <(echo "$before") <(echo "$after"))
+if [[ -z $changed ]]; then pass "a failed conversion leaves every existing file unchanged"; else flunk "a failed conversion changed:"; echo "$changed"; fi
+added=$(comm -13 <(cut -c67- <<<"$before" | LC_ALL=C sort) <(cut -c67- <<<"$after" | LC_ALL=C sort) | tr '\n' ' ')
+check test "$added" = "./.config/hypr/.luarc.json ./.config/hypr/autostart.lua ./.config/hypr/bindings.lua ./.config/hypr/envs.lua ./.config/hypr/hyprland.lua ./.config/hypr/input.lua ./.config/hypr/looknfeel.lua ./.config/hypr/monitors.lua ./.local/state/fedora-hypr/hypr-lua-migration.report ./.local/state/fedora-hypr/toggles/hypr/flags.lua "
+check cmp /etc/skel/.config/hypr/hyprland.lua "$h/.config/hypr/hyprland.lua"
+check grep -q 'could not be converted' "$h/.local/state/fedora-hypr/hypr-lua-migration.report"
 check bash -c "! ls -d '$h'/.config/hypr/legacy-conf-*"
 
 # --- plumbing -----------------------------------------------------------------------
