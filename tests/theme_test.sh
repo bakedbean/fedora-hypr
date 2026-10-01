@@ -63,9 +63,11 @@ rm -rf "$HOME/.config/fedora-hypr/themes/tokyo-night" "$HOME/.config/fedora-hypr
 # hyprland.lua (variables inlined, gradient as a table), not replaced by the template.
 mkdir -p "$HOME/.config/fedora-hypr/themes/tokyo-night"
 printf '%s\n' '$rose = 0xffebbcba' '$pine = 0xff31748f' 'general {' '    col.active_border = $rose $pine 90deg' '}' \
+  'windowrulev2 = bordercolor $rose,fullscreen:1' \
   > "$HOME/.config/fedora-hypr/themes/tokyo-night/hyprland.conf"
 fh-theme-set tokyo-night
 grep -qF 'active_border = { colors = { "0xffebbcba", "0xff31748f" }, angle = 90 }' "$cur/theme/hyprland.lua"
+grep -qF 'hl.window_rule({ match = { fullscreen = true }, border_color = "0xffebbcba" })' "$cur/theme/hyprland.lua"
 ! grep -q 'accent' "$cur/theme/hyprland.lua"
 rm -rf "$HOME/.config/fedora-hypr/themes/tokyo-night"
 

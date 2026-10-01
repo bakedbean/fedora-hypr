@@ -124,6 +124,8 @@ check grep -qF 'hl.env("FIXTURE_EARLY", "1")' "$hy/hyprland-inline.lua"
 check grep -q 'require("hypr.extra")' "$hy/bindings.lua"                 # nested source -> require
 check grep -qF 'hl.window_rule({ match = { class = "^(org.example.app)$" }, float = true, size = "800 600" })' "$hy/extra.lua"
 check grep -qF 'hl.workspace_rule({ workspace = "5", layout = "scrolling" })' "$hy/extra.lua"
+check grep -qF 'hl.window_rule({ match = { fullscreen = true }, border_color = "0xffeb6f92" })' "$hy/extra.lua"
+check grep -qF 'hl.window_rule({ match = { class = "^(pavucontrol)$", title = "^(Volume, Control)$" }, float = true })' "$hy/extra.lua"
 check grep -qF 'hl.bind("SUPER + SHIFT + R", hl.dsp.exec_cmd("radiobar toggle"), { description = "RadioBar play/pause" })' "$hy/bindings.lua"
 check grep -qF 'hl.dsp.exec_cmd("uwsm-app -- xdg-terminal-exec --dir=\"$(fh-cmd-terminal-cwd)\" tmux new")' "$hy/bindings.lua"
 check grep -qF 'https://example.com/#frag' "$hy/bindings.lua"               # ## is a literal #
@@ -210,6 +212,42 @@ check test "$added" = "./.config/hypr/.luarc.json ./.config/hypr/autostart.lua .
 check cmp /etc/skel/.config/hypr/hyprland.lua "$h/.config/hypr/hyprland.lua"
 check grep -q 'could not be converted' "$h/.local/state/fedora-hypr/hypr-lua-migration.report"
 check bash -c "! ls -d '$h'/.config/hypr/legacy-conf-*"
+
+# --- convert (no verification: fh-theme-set and migrate-home use it) ------------------
+# Old-syntax window rules either translate to the same meaning or stay a FIXME as a whole.
+h=$(new_home)
+cat >"$h/rules.conf" <<'CONF'
+windowrulev2 = opacity 0.8, float, class:foo
+windowrulev2 = bordercolor rgba(255,0,0,1) rgba(0,255,0,1), noblur, class:foo
+windowrulev2 = size 800 600, center, class:foo
+windowrulev2 = center 1, class:foo
+windowrulev2 = float, class:^(a, b)$, title:negative:^(x)$
+windowrulev2 = noborder, norounding, floating:1, pinned:0, initialClass:^(z)$
+windowrulev2 = float, noblur, bogus 3, class:foo
+windowrulev2 = float, onworkspace:1
+windowrule = float, title:^(has match: inside)$
+windowrule = float, ^(kitty)$
+windowrule = match:class x, border_color 0xff112233
+CONF
+conv=$(/usr/libexec/fedora-hypr/hypr-conf2lua convert "$h/rules.conf")
+for line in \
+  'hl.window_rule({ match = { class = "foo" }, opacity = 0.8, float = true })' \
+  'hl.window_rule({ match = { class = "foo" }, border_color = "rgba(255,0,0,1) rgba(0,255,0,1)", no_blur = true })' \
+  'hl.window_rule({ match = { class = "foo" }, size = "800 600", center = true })  -- conf2lua: centred in the work area, was the whole monitor' \
+  'hl.window_rule({ match = { class = "foo" }, center = true })' \
+  'hl.window_rule({ match = { class = "^(a, b)$", title = "negative:^(x)$" }, float = true })' \
+  'hl.window_rule({ match = { float = true, pin = false, initial_class = "^(z)$" }, border_size = 0, rounding = 0 })' \
+  "-- FIXME(conf2lua): unknown windowrulev2 effect 'bogus'" \
+  "-- FIXME(conf2lua): unknown windowrulev2 prop 'onworkspace'" \
+  'hl.window_rule({ match = { title = "^(has match: inside)$" }, float = true })' \
+  '-- FIXME(conf2lua): rule needs effects and at least one prop:value' \
+  'hl.window_rule({ match = { class = "x" }, border_color = "0xff112233" })'; do
+  if grep -qF -- "$line" <<<"$conv"; then pass "convert: $line"; else flunk "convert: $line"; fi
+done
+mkdir -p "$h/.config/hypr"
+echo "$conv" >"$h/.config/hypr/hyprland.lua"
+chown -R "$U:$U" "$h"
+if verify_ok "$h"; then pass "converted old-syntax rules load"; else flunk "converted old-syntax rules"; verify "$h"; fi
 
 # --- plumbing -----------------------------------------------------------------------
 check test -x /usr/libexec/fedora-hypr/hypr-conf2lua
