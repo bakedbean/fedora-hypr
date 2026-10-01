@@ -8,7 +8,7 @@ export FH_PATH=/usr/share/fedora-hypr
 fh-theme-set tokyo-night
 cur="$HOME/.config/fedora-hypr/current"
 test "$(cat "$cur/theme.name")" = tokyo-night
-grep -q 'rgb(7aa2f7)' "$cur/theme/hyprland.conf"          # {{ accent_strip }}
+grep -q 'rgb(7aa2f7)' "$cur/theme/hyprland.lua"           # {{ accent_strip }}
 grep -q 'background-color=#1a1b26' "$cur/theme/mako.ini"    # {{ background }}
 grep -q '@define-color foreground #a9b1d6' "$cur/theme/waybar.css"
 grep -q 'background = "#1a1b26"' "$cur/theme/alacritty.toml"
@@ -27,7 +27,7 @@ test "$first" != "$second" || test "$(ls "$cur/theme/backgrounds" | wc -l)" -le 
 mkdir -p "$HOME/.config/fedora-hypr/themes/tokyo-night"
 echo 'accent = "#ff0000"' > "$HOME/.config/fedora-hypr/themes/tokyo-night/colors.toml"
 fh-theme-set tokyo-night
-grep -q 'rgb(ff0000)' "$cur/theme/hyprland.conf"
+grep -q 'rgb(ff0000)' "$cur/theme/hyprland.lua"
 
 # unknown theme is an error
 ! fh-theme-set does-not-exist 2>/dev/null
@@ -46,6 +46,17 @@ mkdir -p "$HOME/.config/fedora-hypr/themed"
 echo 'X{{ accent }}Y' > "$HOME/.config/fedora-hypr/themed/probe.txt.tpl"
 fh-theme-set tokyo-night
 grep -qx 'X#ff0000Y' "$cur/theme/probe.txt"
+rm -rf "$HOME/.config/fedora-hypr/themes/tokyo-night" "$HOME/.config/fedora-hypr/themed"
+
+# A backslash in a value can't break out of a Lua string literal in *.lua templates
+# (a trailing one would otherwise escape the closing quote); other templates get it verbatim.
+mkdir -p "$HOME/.config/fedora-hypr/themes/tokyo-night" "$HOME/.config/fedora-hypr/themed"
+printf '%s\n' 'accent = "#ff0000"' 'cursor = "x\"' > "$HOME/.config/fedora-hypr/themes/tokyo-night/colors.toml"
+echo 'return "{{ cursor }}", "{{ cursor_strip }}"' > "$HOME/.config/fedora-hypr/themed/probe.lua.tpl"
+echo '{{ cursor }}' > "$HOME/.config/fedora-hypr/themed/probe.txt.tpl"
+fh-theme-set tokyo-night
+test "$(lua -e "print((dofile('$cur/theme/probe.lua')))")" = 'x\'
+grep -qxF 'x\' "$cur/theme/probe.txt"
 rm -rf "$HOME/.config/fedora-hypr/themes/tokyo-night" "$HOME/.config/fedora-hypr/themed"
 
 echo "theme_test: OK"

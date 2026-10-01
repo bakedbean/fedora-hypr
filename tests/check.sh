@@ -53,7 +53,7 @@ check grep -q '^disable getty@tty1.service' /usr/lib/systemd/system-preset/05-fe
 # power key opens the system menu (Hyprland XF86PowerOff bind), not an instant logind poweroff;
 # the last HandlePowerKey in the merged config wins, so no later drop-in may override ours
 check bash -c 'systemd-analyze cat-config systemd/logind.conf | grep -E "^HandlePowerKey=" | tail -1 | grep -qx HandlePowerKey=ignore'
-check grep -qE '^bindld = , XF86PowerOff, .*fh-menu system' /usr/share/fedora-hypr/default/hypr/bindings/utilities.conf
+check grep -qF 'fh.bind("XF86PowerOff", "Power menu", "fh-menu system", { locked = true })' /usr/share/fedora-hypr/default/hypr/bindings/utilities.lua
 # systemd-gpt-auto-generator's boot.automount (ESP automount, 120s idle timeout) wraps ostree's /boot bind
 # mount; once it idles out and re-triggers, the mount is torn down at shutdown before ostree-finalize-staged
 # runs ("Remounting /boot read-write: Invalid argument") and staged bootc upgrades are silently dropped
@@ -106,7 +106,7 @@ check test -f /usr/share/zoneinfo/tzdata.zi   # timedatectl itself needs the sys
 # the theme is rendered into the new HOME before any Hyprland session, as that user
 check bash -c 'test "$(cat /var/home/testuser/.config/fedora-hypr/current/theme.name)" = tokyo-night'
 check test -L /var/home/testuser/.config/fedora-hypr/current/background
-check test -f /var/home/testuser/.config/fedora-hypr/current/theme/hyprland.conf
+check test -f /var/home/testuser/.config/fedora-hypr/current/theme/hyprland.lua
 check test "$(stat -c %U /var/home/testuser/.config/fedora-hypr/current/theme.name)" = testuser
 check bash -c 'FH_USER=testuser fh-first-boot-user'   # idempotent: second run succeeds
 check test -f /etc/sudoers.d/wheel
@@ -131,7 +131,7 @@ check bash -c '
   export XDG_RUNTIME_DIR=$(mktemp -d); chmod 700 "$XDG_RUNTIME_DIR"
   FH_THEME_SKIP_BACKGROUND=1 fh-theme-set tokyo-night
   Hyprland --verify-config --i-am-really-stupid'
-# a FRESH skel HOME with no theme rendered yet must still parse (hyprlang noerror around the theme source)
+# a FRESH skel HOME with no theme rendered yet must still load (the theme module is optional)
 check bash -c '
   export HOME=$(mktemp -d); cp -r /etc/skel/. "$HOME"; export FH_PATH=/usr/share/fedora-hypr
   export XDG_RUNTIME_DIR=$(mktemp -d); chmod 700 "$XDG_RUNTIME_DIR"
@@ -163,7 +163,9 @@ check bash -c '
   out=$(XTE_DEBUG=1 xdg-terminal-exec --app-id=x -e true 2>&1)
   ! grep -q "has no TerminalArgAppId" <<<"$out" && grep -q -- "--class=x" <<<"$out"'
 check bash /tests/binds_test.sh
-check bash -c '! grep -rli omarchy /usr/share/fedora-hypr /etc/skel /usr/bin/fh-* /usr/share/plymouth'
+# Lua config: every theme and toggle, rollback guard, migration of a .conf account (prints its own PASS/FAIL lines)
+bash /tests/hypr_lua_test.sh || fail=1
+check bash -c '! grep -rli omarchy /usr/share/fedora-hypr /etc/skel /usr/bin/fh-* /usr/libexec/fedora-hypr /usr/lib/systemd/user/fh-* /usr/share/plymouth'
 check test -f /usr/share/fedora-hypr/default/mako/core.ini
 check grep -q "fedora-hypr/current/theme/alacritty.toml" /etc/skel/.config/alacritty/alacritty.toml
 check bash -c 'sed "s|//.*||" /usr/share/fedora-hypr/default/waybar/config.jsonc | jq .'
@@ -171,9 +173,13 @@ check bash -c 'sed "s|//.*||" /etc/skel/.config/waybar/config.jsonc | jq .'
 check bash -c '! grep -rn "@import \"~" /usr/share/fedora-hypr /etc/skel'
 check test -f /etc/skel/.config/walker/themes/fh-default/style.css
 check grep -q "../fedora-hypr/current/theme/swayosd.css" /etc/skel/.config/swayosd/style.css
-check bash -c '! grep -q dbus-update-activation-environment /usr/share/fedora-hypr/default/hypr/autostart.conf'
-check grep -q 'exec-once = systemctl --user import-environment' /usr/share/fedora-hypr/default/hypr/autostart.conf
+check bash -c '! grep -q dbus-update-activation-environment /usr/share/fedora-hypr/default/hypr/autostart.lua'
+check grep -q 'hl.exec_cmd("systemctl --user import-environment' /usr/share/fedora-hypr/default/hypr/autostart.lua
 check grep -q -- '--dmenu --maxheight "$menu_height" --minheight "$menu_height"' /usr/bin/fh-menu-keybindings
+# Lua binds report dispatcher __lua in `hyprctl binds`; the menu recovers them by evaluating
+# hyprland.lua with the standalone interpreter (its Lua harness must keep working)
+check command -v lua
+check bash -c 'grep -q "command -v lua" /usr/bin/fh-menu-keybindings && grep -q "__fh_dispatcher" /usr/bin/fh-menu-keybindings'
 check grep -q 'FH_PATH:=/usr/share/fedora-hypr' /usr/bin/fh-hyprland-toggle
 check bash -c 'grep -q fh-theme-set-gnome /usr/bin/fh-theme-set && grep -q fh-restart-btop /usr/bin/fh-theme-set'
 check test -f /usr/share/fedora-hypr/themes/white/light.mode
@@ -181,7 +187,7 @@ check grep -q fh-setup-fingerprint /usr/bin/fh-menu
 
 # --- Task 7: helper scripts
 check bash /tests/scripts_test.sh
-check grep -q 'exec-once = uwsm-app -- elephant' /usr/share/fedora-hypr/default/hypr/autostart.conf
+check grep -q 'hl.exec_cmd(fh.launch("elephant"))' /usr/share/fedora-hypr/default/hypr/autostart.lua
 
 # --- Screensaver: tte (terminaltexteffects) terminal screensaver
 check command -v tte fh-launch-screensaver fh-screensaver fh-toggle-screensaver fh-branding-screensaver
@@ -191,8 +197,8 @@ check bash -c '! grep -qi omarchy /usr/share/fedora-hypr/logo.txt'
 check test -f /etc/skel/.config/fedora-hypr/branding/screensaver.txt
 check bash -c 'diff -q /usr/share/fedora-hypr/logo.txt /etc/skel/.config/fedora-hypr/branding/screensaver.txt'
 check grep -q fh-launch-screensaver /etc/skel/.config/hypr/hypridle.conf
-check grep -q 'org.fedorahypr.screensaver' /usr/share/fedora-hypr/default/hypr/apps/screensaver.conf
-check grep -q 'apps/screensaver.conf' /usr/share/fedora-hypr/default/hypr/apps.conf
+check grep -q 'org.fedorahypr.screensaver' /usr/share/fedora-hypr/default/hypr/apps/screensaver.lua
+check grep -q 'default/hypr/apps", "default.hypr.apps"' /usr/share/fedora-hypr/default/hypr/apps.lua   # loads every apps/*.lua
 check test -f /usr/share/fedora-hypr/default/alacritty/screensaver.toml
 check grep -q -- '--config-file /usr/share/fedora-hypr/default/alacritty/screensaver.toml' /usr/bin/fh-launch-screensaver
 check grep -q 'pkill -f org.fedorahypr.screensaver' /usr/bin/fh-system-lock
@@ -223,7 +229,7 @@ check bash -c 'env -i HOME=/h XDG_RUNTIME_DIR=/r PATH=/usr/bin sh -c ". /usr/sha
 check test -f /usr/lib/systemd/user/podman.socket
 # podman-docker prints an "Emulate Docker CLI" banner on every docker call unless this file exists
 check test -f /etc/containers/nodocker
-check grep -q 'exec-once = systemctl --user start podman.socket' /usr/share/fedora-hypr/default/hypr/autostart.conf
+check grep -q 'hl.exec_cmd("systemctl --user start podman.socket")' /usr/share/fedora-hypr/default/hypr/autostart.lua
 # docker-compose ships the Compose v2 plugin where `podman compose` (and thus `docker compose`
 # via the podman-docker shim) looks for an external provider. Probe the plugin directly:
 # `podman compose` itself fails under CI's rootful nested podman (passes rootless).
@@ -251,7 +257,7 @@ check grep -qx 'Icon=/usr/share/fedora-hypr/icons/Docker.png' "$A/Docker.desktop
 # every absolute Icon= in skel entries resolves inside the image (name-style Icon=Alacritty is skipped)
 check bash -c 'for f in /etc/skel/.local/share/applications/*.desktop; do i=$(sed -n "s/^Icon=//p" "$f"); [[ $i == /* ]] || continue; test -f "$i" || exit 1; done'
 check bash -c 'magick identify /usr/share/fedora-hypr/icons/Docker.png "/usr/share/fedora-hypr/icons/Disk Usage.png"'
-check grep -q 'TUI.float' /usr/share/fedora-hypr/default/hypr/apps/system.conf   # float style gets the floating tag
+check grep -q 'TUI.float' /usr/share/fedora-hypr/default/hypr/apps/system.lua   # float style gets the floating tag
 # fh-tui-install/remove (ported omarchy-tui-install/remove): 4-arg form with a local icon path
 # writes an executable entry using that path as-is; remove deletes the entry
 check bash -c 'H=$(mktemp -d); D="$H/.local/share/applications"; HOME=$H fh-tui-install "My TUI" btop float /usr/share/fedora-hypr/icons/Docker.png && test -x "$D/My TUI.desktop" && grep -qx "Exec=xdg-terminal-exec --app-id=TUI.float -e btop" "$D/My TUI.desktop" && grep -qx "Icon=/usr/share/fedora-hypr/icons/Docker.png" "$D/My TUI.desktop" && grep -qx "Name=My TUI" "$D/My TUI.desktop" && HOME=$H fh-tui-remove "My TUI" && test ! -e "$D/My TUI.desktop"'
