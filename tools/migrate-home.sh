@@ -387,11 +387,19 @@ if [[ -d $SRC/$wb ]]; then
 fi
 
 # --- 4. hypr overrides ----------------------------------------------------------------
+# The image's Hyprland config is Lua: the old .conf overrides are rewritten as before, then
+# converted to ~/.config/hypr/<name>.lua (which the skel hyprland.lua loads) by the same
+# converter fh-migrate-hypr-lua uses on the machine. It can't be verified against Hyprland
+# from here; hyprland.lua loads each override module through pcall, so a bad line costs
+# that module, not the session, and `hyprctl configerrors` names it after the first login.
 hy=.config/hypr
+conf2lua=$REPO/system/usr/libexec/fedora-hypr/hypr-conf2lua
 if [[ -d $SRC/$hy ]]; then
-  mkdir -p "$STAGE/$hy"
+  command -v python3 >/dev/null || { echo "python3 is needed to convert the Hyprland overrides to Lua" >&2; exit 1; }
+  mkdir -p "$STAGE/$hy" "$WORK/hypr-conf"
   for f in bindings input looknfeel monitors envs autostart; do
     [[ -f $SRC/$hy/$f.conf ]] || { SKIPPED+=("$hy/$f.conf"); continue; }
+    conf=$WORK/hypr-conf/$f.conf
     # dropped: binds for apps the author no longer uses / the image lacks, and Omarchy-menu comment lines
     grep -v -i -E -e '^[[:space:]]*bindd?[[:space:]]*=.*(obsidian|typora|hey\.com|claudette|cliamp)' \
                   -e 'omarchy menu' "$SRC/$hy/$f.conf" \
@@ -400,14 +408,22 @@ if [[ -d $SRC/$hy ]]; then
           -e 's|uwsm-app -- signal-desktop|uwsm-app -- flatpak run org.signal.Signal|g' \
           -e 's|uwsm-app -- 1password|uwsm-app -- flatpak run com.onepassword.OnePassword|g' \
           -e '/^[[:space:]]*#/ s|[Oo]marchy|fedora-hypr|g' \
-      > "$STAGE/$hy/$f.conf" || true
-    rewrite_home_paths "$STAGE/$hy/$f.conf"
-    TOUCHED+=("$hy/$f.conf")
-    if grep -qi omarchy "$STAGE/$hy/$f.conf"; then
-      echo "WARNING: $hy/$f.conf still mentions omarchy; review by hand" >&2
+      > "$conf" || true
+    rewrite_home_paths "$conf"
+    {
+      echo "-- Converted from the old machine's ~/$hy/$f.conf by tools/migrate-home.sh."
+      echo
+      python3 "$conf2lua" convert "$conf"
+    } > "$STAGE/$hy/$f.lua"
+    TOUCHED+=("$hy/$f.lua")
+    if grep -qi omarchy "$STAGE/$hy/$f.lua"; then
+      echo "WARNING: $hy/$f.lua still mentions omarchy; review by hand" >&2
+    fi
+    if grep -q '^-- FIXME(conf2lua)' "$STAGE/$hy/$f.lua"; then
+      echo "WARNING: $hy/$f.lua has lines the converter left as FIXME comments; review by hand" >&2
     fi
   done
-  REWRITES+=("$hy/*.conf: omarchy- -> fh-; binds for obsidian/typora/hey.com/claudette/cliamp and 'omarchy menu' lines dropped; signal/1password -> flatpak run")
+  REWRITES+=("$hy/*.conf -> $hy/*.lua: omarchy- -> fh-; binds for obsidian/typora/hey.com/claudette/cliamp and 'omarchy menu' lines dropped; signal/1password -> flatpak run; converted to Lua (check \`hyprctl configerrors\` after the first login)")
 fi
 
 # --- 4b. user themes + backgrounds ---------------------------------------------------------------
