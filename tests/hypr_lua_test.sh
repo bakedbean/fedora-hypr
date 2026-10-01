@@ -124,6 +124,8 @@ check grep -qF 'hl.env("FIXTURE_EARLY", "1")' "$hy/hyprland-inline.lua"
 check grep -q 'require("hypr.extra")' "$hy/bindings.lua"                 # nested source -> require
 check grep -qF 'hl.window_rule({ match = { class = "^(org.example.app)$" }, float = true, size = "800 600" })' "$hy/extra.lua"
 check grep -qF 'hl.workspace_rule({ workspace = "5", layout = "scrolling" })' "$hy/extra.lua"
+check grep -qF 'hl.window_rule({ match = { fullscreen = true }, border_color = "0xffeb6f92" })' "$hy/extra.lua"
+check grep -qF 'hl.window_rule({ match = { class = "^(pavucontrol)$", title = "^(Volume, Control)$" }, float = true })' "$hy/extra.lua"
 check grep -qF 'hl.bind("SUPER + SHIFT + R", hl.dsp.exec_cmd("radiobar toggle"), { description = "RadioBar play/pause" })' "$hy/bindings.lua"
 check grep -qF 'hl.dsp.exec_cmd("uwsm-app -- xdg-terminal-exec --dir=\"$(fh-cmd-terminal-cwd)\" tmux new")' "$hy/bindings.lua"
 check grep -qF 'https://example.com/#frag' "$hy/bindings.lua"               # ## is a literal #

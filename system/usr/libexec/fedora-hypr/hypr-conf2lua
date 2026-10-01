@@ -10,7 +10,7 @@
 
 Only the constructs fedora-hypr's own .conf files and typical user overrides
 use are translated (sections, `a:b = v`, $variables, bind*, unbind, env,
-monitor, windowrule, layerrule, workspace, gesture, bezier/animation,
+monitor, windowrule(v2), layerrule, workspace, gesture, bezier/animation,
 exec-once, device blocks, source). Anything else becomes a
 `-- FIXME(conf2lua)` comment carrying the original line, never a guess. Every
 statement is emitted on one physical line, so `migrate` can comment out
@@ -62,6 +62,34 @@ BIND_FLAGS = {
 }
 # Window-rule match props whose 0/1 values are booleans in Lua.
 BOOL_MATCH_PROPS = {"xwayland", "float", "fullscreen", "pin", "focus", "group", "modal"}
+# windowrulev2 (`effect args, prop:value, ...`) names that differ from the Lua
+# ones beyond the inserted underscores. Effects without arguments are flags.
+V2_MATCH_PROPS = {
+    "class": "class", "title": "title", "initialclass": "initial_class",
+    "initialtitle": "initial_title", "tag": "tag", "xwayland": "xwayland",
+    "floating": "float", "fullscreen": "fullscreen", "pinned": "pin", "focus": "focus",
+    "group": "group", "workspace": "workspace", "content": "content", "xdgtag": "xdg_tag",
+}
+V2_EFFECTS = {
+    "noinitialfocus": "no_initial_focus", "stayfocused": "stay_focused", "bordercolor": "border_color",
+    "bordersize": "border_size", "roundingpower": "rounding_power", "noblur": "no_blur",
+    "noshadow": "no_shadow", "nodim": "no_dim", "noanim": "no_anim", "idleinhibit": "idle_inhibit",
+    "suppressevent": "suppress_event", "dimaround": "dim_around", "keepaspectratio": "keep_aspect_ratio",
+    "nofocus": "no_focus", "allowsinput": "allows_input", "renderunfocused": "render_unfocused",
+    "maxsize": "max_size", "minsize": "min_size", "persistentsize": "persistent_size",
+    "nomaxsize": "no_max_size", "forcergbx": "force_rgbx", "noclosefor": "no_close_for",
+    "novrr": "no_vrr", "syncfullscreen": "sync_fullscreen", "fullscreenstate": "fullscreen_state",
+    "noscreenshare": "no_screen_share", "nofollowmouse": "no_follow_mouse",
+    "scrollmouse": "scroll_mouse", "scrolltouchpad": "scroll_touchpad",
+    "focusonactivate": "focus_on_activate",
+}
+V2_PLAIN_EFFECTS = {
+    "float", "tile", "fullscreen", "maximize", "move", "size", "center", "pseudo", "monitor",
+    "workspace", "pin", "opacity", "rounding", "tag", "animation", "group", "content", "xray",
+    "immediate", "opaque", "decorate",
+}
+# Old flags whose Lua form is a value of another effect.
+V2_FLAG_EFFECTS = {"noborder": ("border_size", "0"), "norounding": ("rounding", "0")}
 
 
 # --------------------------------------------------------------------------
@@ -206,7 +234,7 @@ def rule_literal(raw):
         return "true"
     if lower in ("off", "false", "no"):
         return "false"
-    number = number_literal(raw)
+    number = number_literal(raw) if not COLOR_RE.match(raw) else None
     if number is not None:
         return number
     return lua_str(raw)
@@ -420,13 +448,13 @@ class Converter:
     def window_rule(self, value, original, layer=False):
         items = []
         for piece in value.split(","):
-            piece = piece.strip()
-            # A comma inside a regex (match:title ^(a,b)$) splits too eagerly:
+            # A comma inside a regex (match:title ^(a, b)$) splits too eagerly:
             # anything that doesn't start like a rule item belongs to the previous one.
-            if items and not re.match(r"^(match:)?[a-z_]+(\s|$)", piece):
+            if items and not re.match(r"^(match:)?[a-z_]+(\s|$)", piece.strip()):
                 items[-1] += "," + piece
             else:
                 items.append(piece)
+        items = [item.strip() for item in items]
         match, effects = [], []
         for item in items:
             if not item:
@@ -446,6 +474,43 @@ class Converter:
             return self.fixme("rule needs at least one match: and one effect (old windowrule syntax?)", original)
         call = "hl.layer_rule" if layer else "hl.window_rule"
         return f"{call}({lua_table([('match', lua_table(match))] + effects)})"
+
+    def window_rule_v2(self, value, original):
+        """windowrulev2 (and windowrule before 0.53): `effect args, prop:value, ...`.
+        Only names with a known Lua twin are translated: `convert` (fh-theme-set,
+        migrate-home) does not verify its output."""
+        items = []
+        for piece in value.split(","):
+            # a comma inside a regex (title:^(a, b)$) or a colour (rgba(1,2,3,1))
+            # belongs to the item before it
+            if items and not re.match(r"^[A-Za-z]+:", piece.strip()):
+                items[-1] += "," + piece
+            else:
+                items.append(piece)
+        items = [item.strip() for item in items]
+        if len(items) < 2 or not items[0]:
+            return self.fixme("rule needs an effect and at least one prop:value (or the pre-0.48 `rule, regex` form)", original)
+        name, _, val = items[0].partition(" ")
+        name = name.lower()
+        if name in V2_FLAG_EFFECTS and not val.strip():
+            effect, val = V2_FLAG_EFFECTS[name]
+        else:
+            effect = V2_EFFECTS.get(name, name if name in V2_PLAIN_EFFECTS else None)
+        if effect is None:
+            return self.fixme(f"unknown windowrulev2 effect '{name}'", original)
+        match = []
+        for item in items[1:]:
+            prop, _, mval = item.partition(":")
+            key = V2_MATCH_PROPS.get(prop.lower())
+            if key is None:
+                return self.fixme(f"unknown windowrulev2 prop '{prop}'", original)
+            mval = mval.strip()
+            if key in BOOL_MATCH_PROPS and mval.lower() in BOOL_TRUE | BOOL_FALSE:
+                literal = "true" if mval.lower() in BOOL_TRUE else "false"
+            else:
+                literal = lua_str(mval)
+            match.append((key, literal))
+        return f"hl.window_rule({lua_table([('match', lua_table(match)), (effect, rule_literal(val))])})"
 
     def monitor(self, value, original):
         fields = split_args(value, 0)
@@ -626,6 +691,8 @@ class Converter:
             return f"hl.env({lua_str(name.strip())}, {lua_str(val.strip())})"
         if k == "monitor":
             return self.monitor(value, line)
+        if k == "windowrulev2" or (k == "windowrule" and "match:" not in value):
+            return self.window_rule_v2(value, line)
         if k == "windowrule":
             return self.window_rule(value, line)
         if k == "layerrule":
@@ -646,7 +713,7 @@ class Converter:
             return self.fixme("exec runs on every reload; use hl.on(\"config.reloaded\", ...) or exec-once", line)
         if k == "source":
             return self.source(value, line)
-        if k in ("windowrulev2", "layerrulev2", "plugin", "permission"):
+        if k in ("layerrulev2", "plugin", "permission"):
             return self.fixme(f"'{k}' needs a manual port", line)
         path = sections + [p for p in re.split(r"[:.]", key) if p]
         if not path or not all(re.match(r"^[A-Za-z0-9_]+$", p) for p in path):
