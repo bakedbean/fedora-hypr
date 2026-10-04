@@ -4,7 +4,7 @@
 
 # --- Stage 1: Rust binaries not packaged in Fedora (wsx, waybar-docker).
 # Only the final stage ships; this one is dropped. Bump WSX_REF to update wsx.
-FROM registry.fedoraproject.org/fedora:44@sha256:539cadb5d8a43564d8abefd6eafdfcbcd4809070efbb900ec248229903db5911 AS rust-build
+FROM registry.fedoraproject.org/fedora:44@sha256:7011f51bd8089d345be42d41f0aa3190d258823528852a5e7ec976fe2fd20f53 AS rust-build
 ARG WSX_REF=2044830ee4fea6cc1e0d7df75d7a6f24dfef89c2
 RUN dnf install -y cargo rust gcc git && dnf clean all && rustc --version
 # wsx needs rust >= 1.85 (edition 2024); rusqlite "bundled" compiles SQLite with gcc.
@@ -20,7 +20,7 @@ RUN --mount=type=cache,target=/root/.cargo/registry \
 # --- Stage 2: ngrok, not packaged for Fedora. Pinned .deb from ngrok's apt repo (the
 # tarball URL is unversioned); a static Go binary, so only /usr/local/bin/ngrok is kept.
 # Bump: pick Version/SHA256 from https://ngrok-agent.s3.amazonaws.com/dists/buster/main/binary-amd64/Packages
-FROM registry.fedoraproject.org/fedora:44@sha256:539cadb5d8a43564d8abefd6eafdfcbcd4809070efbb900ec248229903db5911 AS ngrok-fetch
+FROM registry.fedoraproject.org/fedora:44@sha256:7011f51bd8089d345be42d41f0aa3190d258823528852a5e7ec976fe2fd20f53 AS ngrok-fetch
 ARG NGROK_VERSION=3.39.11
 ARG NGROK_SHA256=e51aa234283bcf20a777e21a624b2a3501b058b3d5a1faec59106311dbe30395
 RUN dnf install -y binutils tar xz && dnf clean all \
@@ -30,7 +30,7 @@ RUN dnf install -y binutils tar xz && dnf clean all \
     && install -Dm755 /tmp/usr/local/bin/ngrok /out/bin/ngrok
 
 # --- Stage 3: the image
-FROM ghcr.io/ublue-os/base-main:44@sha256:e18260b7e7a3e68d065a4ffb42fb22eeb3b1c0d1e0790e5232a4b88d16e90975
+FROM ghcr.io/ublue-os/base-main:44@sha256:69c8d37d52ea3cb9ec65cede1a1428a9df296341c7ac4556f9c9b14d93ce614f
 
 # build/ is COPYed (not bind-mounted) so its content is part of the layer key: CI's
 # registry cache (--cache-from) ignores bind-mount sources and reused a stale package
