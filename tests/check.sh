@@ -175,6 +175,12 @@ check test -f /etc/skel/.config/walker/themes/fh-default/style.css
 check grep -q "../fedora-hypr/current/theme/swayosd.css" /etc/skel/.config/swayosd/style.css
 check bash -c '! grep -q dbus-update-activation-environment /usr/share/fedora-hypr/default/hypr/autostart.lua'
 check grep -q 'hl.exec_cmd("systemctl --user import-environment' /usr/share/fedora-hypr/default/hypr/autostart.lua
+# The PAM-unlocked keyring daemon exits after 120 s unless the session runs --start; GNOME's
+# autostart entry for it is OnlyShowIn=GNOME, so autostart.lua does it (else apps prompt for the password)
+check grep -q 'hl.exec_cmd("gnome-keyring-daemon --start --components=secrets")' /usr/share/fedora-hypr/default/hypr/autostart.lua
+check grep -Eq '^-?auth +optional +pam_gnome_keyring.so' /etc/pam.d/greetd
+check grep -Eq '^-?session +optional +pam_gnome_keyring.so auto_start' /etc/pam.d/greetd
+check test -f /usr/lib64/security/pam_gnome_keyring.so
 check grep -q -- '--dmenu --maxheight "$menu_height" --minheight "$menu_height"' /usr/bin/fh-menu-keybindings
 # Lua binds report dispatcher __lua in `hyprctl binds`; the menu recovers them by evaluating
 # hyprland.lua with the standalone interpreter (its Lua harness must keep working)
