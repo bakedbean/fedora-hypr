@@ -56,6 +56,7 @@ tests/check.sh             in-image self-check (~360 checks); runs theme_test.sh
 tests/hypr_lua_test.sh     loads the Lua config with Hyprland's verifier (every theme, every toggle), rollback guard, and
                            migrates tests/fixtures/legacy-hypr (an old .conf account) end to end
 tests/hypr_binds.lua       evaluates hyprland.lua against a recording `hl` stub; binds_test.sh reads its output
+tests/hypr_autostart.lua   same stub idea for hl.exec_cmd: prints each command as load- or hyprland.start-time (check.sh)
 tests/migrate_test.sh      HOST-side test of tools/migrate-home.sh on a fabricated home (make test-migrate)
 tools/migrate-home.sh      copies the author's old home onto a target drive (see "Migrating a home")
 tools/bump-base.sh         re-pins the Containerfile FROM digests (weekly CI run commits the result; `make bump-base` locally)
@@ -521,6 +522,19 @@ A failed CI build is safe: the machine keeps its last good image.
   magenta.nvim's Linux sandbox down with it. Anything that must stay goes in
   `build/packages/fedora.txt` and ships in the image; layering is only ever a throwaway experiment.
 
+- **The PAM-started keyring daemon quits after 120 s unless the session runs `--start`.**
+  `pam_gnome_keyring` (greetd) starts `gnome-keyring-daemon --login` and unlocks the login keyring, but it
+  exits if nothing calls `gnome-keyring-daemon --start` within `LOGIN_TIMEOUT` (120 s, `daemon/gkd-main.c`).
+  GNOME does that from `/etc/xdg/autostart/gnome-keyring-secrets.desktop`, which is
+  `OnlyShowIn=GNOME;Unity;MATE;`, so uwsm skips it. The first secret request after that D-Bus-activates a
+  fresh, locked daemon and the user is asked for the keyring password; it looked like an update regression
+  only because the first request after that reboot came 5 min after login (earlier boots happened to ask
+  within 2 min). `autostart.lua` runs
+  `--start --components=secrets`. Symptom check: `journalctl -b | grep discover_other_daemon` (`0` = the
+  D-Bus-activated daemon found no daemon on the default control socket; correlate with `gkr-pam` log
+  times and the daemon's PID to tell the timeout from a crash). `tests/hypr_autostart.lua` asserts the
+  call runs once at Hyprland start and never at config load. It cannot help when there is no login
+  password to unlock with (fingerprint login), or when the daemon crashes later.
 - **`Hyprland --verify-config` executes config code.** Top-level `hl.exec_cmd()` and `config.reloaded`
   handlers run during verification (`hyprland.start` handlers don't). Launch things from
   `hl.on("hyprland.start", …)`, and never let a converted `exec =` become top-level code.
