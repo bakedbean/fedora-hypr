@@ -521,6 +521,15 @@ A failed CI build is safe: the machine keeps its last good image.
   magenta.nvim's Linux sandbox down with it. Anything that must stay goes in
   `build/packages/fedora.txt` and ships in the image; layering is only ever a throwaway experiment.
 
+- **The PAM-started keyring daemon quits after 120 s unless the session runs `--start`.**
+  `pam_gnome_keyring` (greetd) starts `gnome-keyring-daemon --login` and unlocks the login keyring, but it
+  exits if nothing calls `gnome-keyring-daemon --start` within `LOGIN_TIMEOUT` (120 s, `daemon/gkd-main.c`).
+  GNOME does that from `/etc/xdg/autostart/gnome-keyring-secrets.desktop`, which is `OnlyShowIn=GNOME`, so
+  uwsm skips it. The first secret request after that D-Bus-activates a fresh, locked daemon and the user is
+  asked for the keyring password; it looked like an update regression only because the first request after
+  that reboot came 5 min after login (earlier boots happened to ask within 2 min). `autostart.lua` runs
+  `--start --components=secrets`. Symptom check: `journalctl -b | grep discover_other_daemon` (`0` = the
+  PAM daemon was gone).
 - **`Hyprland --verify-config` executes config code.** Top-level `hl.exec_cmd()` and `config.reloaded`
   handlers run during verification (`hyprland.start` handlers don't). Launch things from
   `hl.on("hyprland.start", …)`, and never let a converted `exec =` become top-level code.
