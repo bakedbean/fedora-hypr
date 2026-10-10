@@ -29,7 +29,7 @@ check rpm -q nerd-fonts-jetbrainsmono nerd-fonts-firacode jetbrains-mono-fonts \
       libva-intel-media-driver xdg-desktop-portal-hyprland xdg-desktop-portal-gtk \
       qt5-qtwayland qt6-qtwayland podman-docker gnome-keyring-pam fprintd-pam iwd
 # No third-party repos left in the runtime image
-check bash -c '! ls /etc/yum.repos.d/ | grep -Eq "^(dtutila|washkinazy|mineiro|agaspar|whelanh)-"'
+check bash -c '! ls /etc/yum.repos.d/ | grep -Eq "^(dtutila|washkinazy|mineiro|agaspar|whelanh|tailscale)"'
 
 # --- Task 3: session plumbing
 check test -f /etc/greetd/config.toml
@@ -45,6 +45,9 @@ check test "$(systemctl is-enabled getty@tty1 2>/dev/null)" = disabled
 check bash -lc 'test "$FH_PATH" = /usr/share/fedora-hypr'
 check grep -q 'wifi.backend=iwd' /etc/NetworkManager/conf.d/wifi-backend-iwd.conf
 check test "$(systemctl is-enabled iwd 2>/dev/null)" = enabled
+check command -v tailscale
+check command -v tailscaled
+check test "$(systemctl is-enabled tailscaled 2>/dev/null)" = enabled
 check test "$(systemctl is-enabled sshd 2>/dev/null)" = disabled
 # first boot runs preset-all (empty machine-id); our preset must win over 90-default's "enable sshd"
 check test -f /usr/lib/systemd/system-preset/05-fedora-hypr.preset

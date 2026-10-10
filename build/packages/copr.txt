@@ -29,3 +29,5 @@ gpu-screen-recorder
 python3-terminaltexteffects
 # whelanh/omarchy
 hyprland-preview-share-picker
+# tailscale (pkgs.tailscale.com, build/repos/tailscale.repo)
+tailscale

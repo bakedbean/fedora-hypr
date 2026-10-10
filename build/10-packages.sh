@@ -29,3 +29,4 @@ rm -rf /var/cache/libdnf5 /var/cache/ldconfig/aux-cache
 rm -rf /var/lib/dnf/repos
 rm -rf /var/lib/ead /var/lib/fprint /var/lib/iwd /var/lib/power-profiles-daemon
 rm -rf /var/lib/greetd/.config
+rm -rf /var/cache/tailscale   # tailscaled.service recreates it (CacheDirectory=)
