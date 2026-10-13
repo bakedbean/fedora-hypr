@@ -29,7 +29,17 @@ RUN dnf install -y binutils tar xz && dnf clean all \
     && ar p /tmp/ngrok.deb data.tar.xz | tar -xJf - -C /tmp ./usr/local/bin/ngrok \
     && install -Dm755 /tmp/usr/local/bin/ngrok /out/bin/ngrok
 
-# --- Stage 3: the image
+# --- Stage 3: tether (iPhone bridge, github.com/zackb/tether), not packaged for Fedora.
+# Pinned upstream release RPM, hash-checked; installed (with its deps) by build/12-tether.sh.
+# Bump: version + "digest" of tether-<ver>-1.x86_64.rpm from `gh release view v<ver> -R zackb/tether --json assets`
+FROM registry.fedoraproject.org/fedora:44@sha256:1b8544582f974533fb8d9a5d6bf6dc2caf0d977ea54979d5e864a6ffd345c32e AS tether-fetch
+ARG TETHER_VERSION=0.2.37
+ARG TETHER_SHA256=a798e9aac96922a7230105ff62308ff6e0c4a607aec2711226701956df6d0e06
+RUN curl -fsSLo /tmp/tether.rpm "https://github.com/zackb/tether/releases/download/v${TETHER_VERSION}/tether-${TETHER_VERSION}-1.x86_64.rpm" \
+    && echo "${TETHER_SHA256}  /tmp/tether.rpm" | sha256sum -c - \
+    && install -Dm644 /tmp/tether.rpm /out/tether.rpm
+
+# --- Stage 4: the image
 FROM ghcr.io/ublue-os/base-main:44@sha256:ff8caa304966a761288a3cdb2063b778aef2deb0691d27670d48940aac4ca94d
 
 # build/ is COPYed (not bind-mounted) so its content is part of the layer key: CI's
@@ -45,6 +55,10 @@ RUN --mount=type=cache,dst=/var/cache/dnf /ctx/10-packages.sh
 COPY --from=rust-build /out/bin/wsx /usr/bin/wsx
 COPY --from=rust-build /out/bin/waybar-docker /usr/bin/waybar-docker
 COPY --from=ngrok-fetch /out/bin/ngrok /usr/bin/ngrok
+
+# tether in its own layer so a version bump does not re-run the package layer
+COPY --from=tether-fetch /out/tether.rpm /ctx/tether.rpm
+RUN --mount=type=cache,dst=/var/cache/dnf /ctx/12-tether.sh
 
 # Initramfs rebuild (Plymouth theme must be inside it) needs only the theme + plymouthd.conf,
 # so copy just those first: the ~1 min dracut layer then caches across all other system/ edits.

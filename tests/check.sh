@@ -256,6 +256,21 @@ done
 check bash -c '! rpm -q postgresql-server'
 # ngrok: pinned binary from the ngrok-fetch stage (Containerfile)
 check bash -c "ngrok version | grep -q '^ngrok version 3\\.'"
+# tether (iPhone bridge): pinned release RPM from the tether-fetch stage (Containerfile)
+check rpm -V tether
+for b in tether tetherd tether-gtk tether-dialog tether-native-host; do check command -v "$b"; done
+check rpm -q bluez-obexd
+check test "$(systemctl --global is-enabled tetherd.service 2>/dev/null)" = enabled
+check test "$(systemctl is-enabled tether-btclass@hci0.service 2>/dev/null)" = enabled
+# ANCS needs bluetoothd --experimental; the drop-in's ExecStart must be the last one and exist
+check bash -c 'systemctl cat bluetooth.service | grep "^ExecStart=." | tail -1 | grep -qx "ExecStart=/usr/libexec/bluetooth/bluetoothd --experimental"'
+check test -x /usr/libexec/bluetooth/bluetoothd
+check firewall-offline-cmd --zone=public --query-service=tether
+check firewall-offline-cmd --zone=public --query-service=mdns
+check test "$(firewall-offline-cmd --get-default-zone)" = public
+# keep the phone's audio on the phone: exactly one system file may set bluez5.roles
+check test "$(grep -rl 'bluez5.roles' /usr/share/wireplumber /etc/wireplumber 2>/dev/null | wc -l)" = 1
+check grep -q 'bluez5.roles = \[ a2dp_source bap_source hfp_ag \]' /usr/share/wireplumber/wireplumber.conf.d/51-fedora-hypr-no-phone-audio.conf
 
 # --- TUI launchers: Omarchy's stock "Docker"/"Disk Usage" app-launcher entries. Its
 # install/packaging/tuis.sh wrote them into ~/.local/share/applications at install time
