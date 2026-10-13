@@ -152,6 +152,18 @@ login uses the old `hyprland.conf` again.
   in `fh-menu` (or `fh-toggle-screensaver`); edit or restore its wordmark with Style → Screensaver
   (or `fh-branding-screensaver text|reset`).
 
+- iPhone bridge: [tether](https://github.com/zackb/tether) (clipboard sync, file transfer, SMS/iMessage,
+  notification mirroring, calls) is preinstalled with its system setup done: `tetherd` runs per user
+  from login, `bluetoothd` runs `--experimental` (needed for notifications, *before* pairing),
+  `tether-btclass@hci0` keeps the Class of Device iOS wants, the firewalld `public` zone allows the
+  `tether` service (5134/tcp), and WirePlumber no longer offers this machine as a speaker for the phone
+  (`/usr/share/wireplumber/wireplumber.conf.d/51-fedora-hypr-no-phone-audio.conf`). To pair: install
+  "Tether - Linux Companion" on the iPhone and accept the Wi-Fi pairing in `tether-gtk` (or
+  `tether pending` / `tether accept <fp>`); for Messages/notifications, pair over Bluetooth on the
+  Devices page (or `tether --bt-devices`, `tether --bt-pair <addr>`), then on the iPhone enable "Show
+  Message Notifications" and "Sync Contacts" under Settings → Bluetooth → (i) for this computer.
+  `tether --bt-setup` should print nothing left to do. Copied files land in `~/Downloads`.
+
 ## CI
 
 `.github/workflows/build.yml` builds the image with BuildKit (`docker buildx`), pushes it to a
