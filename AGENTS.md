@@ -23,6 +23,7 @@ were overridden during implementation — the code and this file win where they 
 Containerfile              stage rust-build (wsx, waybar-docker) → FROM ghcr.io/ublue-os/base-main:44@sha256:…; COPY build/ /ctx → packages → COPY --from=rust-build → COPY plymouth → initramfs → COPY system/ → services → lint
                            both FROMs are digest-pinned (see "Updates"); tools/bump-base.sh / `make bump-base` re-pins
 build/10-packages.sh       dnf install from build/packages/{fedora,copr}.txt; COPRs from build/repos/*.repo
+build/12-tether.sh         dnf install of the pinned tether RPM from the tether-fetch stage (own layer)
 build/15-initramfs.sh      dracut rebuild so the Plymouth theme is in the initramfs; own layer so it caches across system/ edits
 build/20-services.sh       systemctl enable/disable, authselect, cleanup; COPR repo files removed here; gschema compile
 system/                    copied verbatim onto / in the image
@@ -413,6 +414,16 @@ is `cargo install`ed by version. Cargo registry and target dirs are `--mount=typ
 after a bump is incremental (~2 min cold). The stage does not ship; only the two binaries are copied.
 `ngrok` (no RPM or COPR) comes from the `ngrok-fetch` stage: the `.deb` from ngrok's apt repo, pinned by
 `ARG NGROK_VERSION`/`NGROK_SHA256` and hash-checked, with only its static binary copied to `/usr/bin/ngrok`.
+`tether` (iPhone bridge, github.com/zackb/tether; no COPR) comes from the `tether-fetch` stage: upstream's
+release RPM pinned by `ARG TETHER_VERSION`/`TETHER_SHA256`, copied into `/ctx` and installed by
+`build/12-tether.sh` in its own layer (dnf pulls `bluez-obexd` etc.), so a bump doesn't re-run the package
+layer. Its setup is image-owned: `tetherd.service` is `--global` enabled (it finds the compositor itself
+when started before it), `tether-btclass@hci0` enabled, a `bluetooth.service.d` drop-in adds `--experimental`
+(must be active before pairing or the bond lacks the LE half ANCS needs), the firewalld `public` zone gets the
+`tether` service via `firewall-offline-cmd` (writes `/etc/firewalld/zones/public.xml`; a locally edited
+copy on a machine wins the `/etc` merge and would need `sudo firewall-cmd --permanent --add-service=tether`),
+and a WirePlumber drop-in sets `bluez5.roles` so the phone's audio stays on the phone (upstream's
+recommendation; exactly one file may set that key, `tests/check.sh` checks).
 If a COPR dies, alternatives with F44 builds: `sachesi/hyprland` (no uwsm). Check with
 `curl -s 'https://copr.fedorainfracloud.org/api_3/project?ownername=X&projectname=Y' | jq .chroot_repos`.
 A failed CI build is safe: the machine keeps its last good image.

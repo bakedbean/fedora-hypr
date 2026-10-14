@@ -11,6 +11,13 @@ systemctl enable iwd.service
 systemctl enable power-profiles-daemon.service
 systemctl enable bluetooth.service
 systemctl enable tailscaled.service   # `sudo tailscale up` once to log in
+# tether (iPhone bridge): the daemon runs per user from login; the class unit sets the
+# Bluetooth Class of Device iOS needs before it offers Messages/Contacts permissions
+# (bluetoothd resets it on every start; PartOf=bluetooth.service re-runs it).
+systemctl --global enable tetherd.service
+systemctl enable tether-btclass@hci0.service
+# The iPhone app connects to tetherd's mTLS listener on 5134/tcp (mdns is already open).
+firewall-offline-cmd --zone=public --add-service=tether
 systemctl enable fprintd.service 2>/dev/null || true   # socket/dbus activated on Fedora; harmless
 # base-main enables sshd; a desktop image should not listen by default.
 systemctl disable sshd.service
