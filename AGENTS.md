@@ -406,6 +406,7 @@ Sources, all pinned in `build/repos/*.repo` with `includepkgs` except the Hyprla
 - `mineiro/utility-belt` — impala, bluetui
 - `agaspar/omedora-4` — satty, starship, lazygit, lazydocker, mise, gpu-screen-recorder
 - `whelanh/omarchy` — hyprland-preview-share-picker
+- `scottames/ghostty` — ghostty (the COPR Ghostty's own install docs point to; gtk4-layer-shell comes from Fedora)
 - `pkgs.tailscale.com` (Tailscale's own stable repo, not a COPR) — tailscale; `tailscaled.service` is enabled, log in with `sudo tailscale up`
 Rust binaries not packaged anywhere (`wsx`, `waybar-docker`) are built in the `rust-build` stage of the
 Containerfile (`registry.fedoraproject.org/fedora:44` + cargo; rustc 1.98 there, wsx needs ≥1.85). wsx is

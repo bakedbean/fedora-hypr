@@ -31,3 +31,5 @@ python3-terminaltexteffects
 hyprland-preview-share-picker
 # tailscale (pkgs.tailscale.com, build/repos/tailscale.repo)
 tailscale
+# scottames/ghostty
+ghostty
