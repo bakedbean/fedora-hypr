@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Drop build-time COPR (and Tailscale) definitions so the runtime image has no third-party repos.
-rm -f /etc/yum.repos.d/{dtutila,washkinazy,mineiro,agaspar,whelanh}-*.repo /etc/yum.repos.d/tailscale.repo
+rm -f /etc/yum.repos.d/{dtutila,washkinazy,mineiro,agaspar,whelanh,scottames}-*.repo /etc/yum.repos.d/tailscale.repo
 
 # --- Task 3: session plumbing
 systemctl enable greetd.service

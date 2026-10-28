@@ -7,13 +7,14 @@ check() { if "$@" >/dev/null 2>&1; then echo "PASS $*"; else echo "FAIL $*"; fai
 # --- Task 2: packages
 for b in Hyprland hyprlock hypridle hyprpicker hyprsunset uwsm \
          walker elephant waybar mako swaybg grim slurp satty wl-copy \
-         alacritty starship lazygit mise impala bluetui wiremix gum greetd tuigreet \
+         alacritty ghostty starship lazygit mise impala bluetui wiremix gum greetd tuigreet \
          gpu-screen-recorder hyprland-preview-share-picker firefox nautilus \
          zsh chsh nvim gh btop bat eza fd rg zoxide jq dust tldr fastfetch magick \
          fcitx5 flatpak cc gcc g++ make strace; do
   check command -v "$b"
 done
 check aws --version
+check bash -c "ghostty +version | grep -q ^Ghostty"
 check test -x /usr/libexec/hyprpolkitagent
 # magenta.nvim runs every sandboxed command as `strace -f -qq -e trace=file,... -o FILE -- bash -c CMD`
 # and parses the trace; existence is not enough, ptrace has to actually work.
@@ -29,7 +30,7 @@ check rpm -q nerd-fonts-jetbrainsmono nerd-fonts-firacode jetbrains-mono-fonts \
       libva-intel-media-driver xdg-desktop-portal-hyprland xdg-desktop-portal-gtk \
       qt5-qtwayland qt6-qtwayland podman-docker gnome-keyring-pam fprintd-pam iwd
 # No third-party repos left in the runtime image
-check bash -c '! ls /etc/yum.repos.d/ | grep -Eq "^(dtutila|washkinazy|mineiro|agaspar|whelanh|tailscale)"'
+check bash -c '! ls /etc/yum.repos.d/ | grep -Eq "^(dtutila|washkinazy|mineiro|agaspar|whelanh|scottames|tailscale)"'
 
 # --- Task 3: session plumbing
 check test -f /etc/greetd/config.toml
