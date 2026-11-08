@@ -4,7 +4,7 @@
 
 # --- Stage 1: Rust binaries not packaged in Fedora (wsx, waybar-docker).
 # Only the final stage ships; this one is dropped. Bump WSX_REF to update wsx.
-FROM registry.fedoraproject.org/fedora:44@sha256:d68cae9185777603262e0a7094f792ffed9326b22e1a03e2d2a1731fc3f94733 AS rust-build
+FROM registry.fedoraproject.org/fedora:44@sha256:5aae8bdc5f40bf70f8f189a70770e6f1fabcb04976e841262431c3bbfdbe3538 AS rust-build
 ARG WSX_REF=2044830ee4fea6cc1e0d7df75d7a6f24dfef89c2
 RUN dnf install -y cargo rust gcc git && dnf clean all && rustc --version
 # wsx needs rust >= 1.85 (edition 2024); rusqlite "bundled" compiles SQLite with gcc.
@@ -20,7 +20,7 @@ RUN --mount=type=cache,target=/root/.cargo/registry \
 # --- Stage 2: ngrok, not packaged for Fedora. Pinned .deb from ngrok's apt repo (the
 # tarball URL is unversioned); a static Go binary, so only /usr/local/bin/ngrok is kept.
 # Bump: pick Version/SHA256 from https://ngrok-agent.s3.amazonaws.com/dists/buster/main/binary-amd64/Packages
-FROM registry.fedoraproject.org/fedora:44@sha256:d68cae9185777603262e0a7094f792ffed9326b22e1a03e2d2a1731fc3f94733 AS ngrok-fetch
+FROM registry.fedoraproject.org/fedora:44@sha256:5aae8bdc5f40bf70f8f189a70770e6f1fabcb04976e841262431c3bbfdbe3538 AS ngrok-fetch
 ARG NGROK_VERSION=3.39.11
 ARG NGROK_SHA256=e51aa234283bcf20a777e21a624b2a3501b058b3d5a1faec59106311dbe30395
 RUN dnf install -y binutils tar xz && dnf clean all \
@@ -32,7 +32,7 @@ RUN dnf install -y binutils tar xz && dnf clean all \
 # --- Stage 3: tether (iPhone bridge, github.com/zackb/tether), not packaged for Fedora.
 # Pinned upstream release RPM, hash-checked; installed (with its deps) by build/12-tether.sh.
 # Bump: version + "digest" of tether-<ver>-1.x86_64.rpm from `gh release view v<ver> -R zackb/tether --json assets`
-FROM registry.fedoraproject.org/fedora:44@sha256:d68cae9185777603262e0a7094f792ffed9326b22e1a03e2d2a1731fc3f94733 AS tether-fetch
+FROM registry.fedoraproject.org/fedora:44@sha256:5aae8bdc5f40bf70f8f189a70770e6f1fabcb04976e841262431c3bbfdbe3538 AS tether-fetch
 ARG TETHER_VERSION=0.2.37
 ARG TETHER_SHA256=a798e9aac96922a7230105ff62308ff6e0c4a607aec2711226701956df6d0e06
 RUN curl -fsSLo /tmp/tether.rpm "https://github.com/zackb/tether/releases/download/v${TETHER_VERSION}/tether-${TETHER_VERSION}-1.x86_64.rpm" \
@@ -40,7 +40,7 @@ RUN curl -fsSLo /tmp/tether.rpm "https://github.com/zackb/tether/releases/downlo
     && install -Dm644 /tmp/tether.rpm /out/tether.rpm
 
 # --- Stage 4: the image
-FROM ghcr.io/ublue-os/base-main:44@sha256:1767c7f91959fa652e5d7a863959b23625d4d76ac37fbf6e9b815ed72446a2e1
+FROM ghcr.io/ublue-os/base-main:44@sha256:232f04ce6581bfa36c8b3632d98a8b5faf40b491e86dad4c6840761492e4276f
 
 # build/ is COPYed (not bind-mounted) so its content is part of the layer key: CI's
 # registry cache (--cache-from) ignores bind-mount sources and reused a stale package
