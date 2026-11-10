@@ -304,6 +304,21 @@ check grep -q '"custom/update"' /usr/share/fedora-hypr/default/waybar/config.jso
 # print a false positive here — exit 1, empty stdout
 check bash -c '[ -z "$(fh-update-available)" ]'
 check bash -c 'fh-update-available; test $? -eq 1'
+# behavioral, with stub sudo/skopeo on PATH (t = stub dir, its XDG_RUNTIME_DIR holds the cache).
+# Waybar polls straight after resume, before Wi-Fi is back: a registry failure must be retried, and a
+# failure that outlasts the retries must not be cached as "none" (that hid a real update for a week).
+upd_stubs='t=$(mktemp -d); mkdir -p $t/bin $t/rt
+printf "%s\n" "#!/bin/sh" "printf %s \"{\\\"status\\\":{\\\"staged\\\":null,\\\"booted\\\":{\\\"image\\\":{\\\"image\\\":{\\\"image\\\":\\\"ghcr.io/x/y:44\\\",\\\"transport\\\":\\\"\${TRANSPORT:-registry}\\\"},\\\"imageDigest\\\":\\\"sha256:old\\\"}}}}\"" >$t/bin/sudo
+printf "%s\n" "#!/bin/sh" "n=\$(cat $t/n 2>/dev/null || echo 0); echo \$((n+1)) >$t/n" "[ \$n -ge \${FAILS:-0} ] || exit 1" "echo \"{\\\"Digest\\\":\\\"\${DIGEST:-sha256:new}\\\"}\"" >$t/bin/skopeo
+chmod +x $t/bin/*; run() { env PATH=$t/bin:$PATH XDG_RUNTIME_DIR=$t/rt FH_UPDATE_NET_WAIT=3 FH_UPDATE_RETRY_DELAY=1 "$@" fh-update-available; }'
+check bash -c "$upd_stubs"'; test "$(run)" = available && grep -q " available$" $t/rt/fh-update-available'
+check bash -c "$upd_stubs"'; out=$(run DIGEST=sha256:old); test $? -eq 1 && test -z "$out" && grep -q " none$" $t/rt/fh-update-available'
+# offline for two attempts, back on the third: still finds the update
+check bash -c "$upd_stubs"'; test "$(run FAILS=2)" = available && test "$(cat $t/n)" = 3'
+# offline throughout: exit 1, nothing printed, nothing cached, so the next poll asks again
+check bash -c "$upd_stubs"'; out=$(run FAILS=99); test $? -eq 1 && test -z "$out" && test ! -e $t/rt/fh-update-available'
+# booted from local containers-storage: no registry to ask, no retry loop
+check bash -c "$upd_stubs"'; out=$(run TRANSPORT=containers-storage); test $? -eq 1 && test -z "$out" && test ! -e $t/n'
 # scoped sudoers rule: %wheel gets passwordless sudo for exactly this bootc status invocation
 check visudo -cf /etc/sudoers.d/zz-fh-update-available
 check test "$(stat -c %a /etc/sudoers.d/zz-fh-update-available)" = 440
