@@ -1,0 +1,8 @@
+#!/bin/sh
+# stub for fh-update-available's `sudo -n /usr/sbin/bootc status --format json` (tests/check.sh)
+# SUDO_FAIL=1: the sudoers rule is missing; STATUS_JSON: raw output; else built from
+# TRANSPORT (registry), STAGED (null), BOOTED_DIGEST (sha256:old)
+[ -n "${SUDO_FAIL:-}" ] && exit 1
+if [ -n "${STATUS_JSON:-}" ]; then printf '%s\n' "$STATUS_JSON"; exit 0; fi
+printf '{"status":{"staged":%s,"booted":{"image":{"image":{"image":"ghcr.io/x/y:44","transport":"%s"},"imageDigest":"%s"}}}}\n' \
+  "${STAGED:-null}" "${TRANSPORT:-registry}" "${BOOTED_DIGEST:-sha256:old}"

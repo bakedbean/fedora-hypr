@@ -304,6 +304,32 @@ check grep -q '"custom/update"' /usr/share/fedora-hypr/default/waybar/config.jso
 # print a false positive here — exit 1, empty stdout
 check bash -c '[ -z "$(fh-update-available)" ]'
 check bash -c 'fh-update-available; test $? -eq 1'
+# behavioral, with stub sudo/skopeo on PATH (tests/fixtures/update-stubs; $t/rt holds the cache).
+# Waybar polls straight after resume, before Wi-Fi is back: a registry failure must be retried, and a
+# failure that outlasts the retries must not be cached as "none" (that hid a real update for a week).
+upd='t=$(mktemp -d); mkdir -p $t/bin $t/rt; cp /tests/fixtures/update-stubs/* $t/bin/
+run() { env PATH=$t/bin:$PATH STUB_DIR=$t XDG_RUNTIME_DIR=$t/rt FH_UPDATE_NET_WAIT=3 FH_UPDATE_RETRY_DELAY=1 "$@" fh-update-available; }
+uncached() { out=$(run "$@"); test $? -eq 1 && test -z "$out" && test ! -e $t/rt/fh-update-available; }'
+check bash -c "$upd"'; test "$(run)" = available && grep -q " available$" $t/rt/fh-update-available'
+check bash -c "$upd"'; grep -qx -- "--command-timeout 3s inspect --no-tags docker://ghcr.io/x/y:44" <(run >/dev/null; cat $t/args)'
+check bash -c "$upd"'; out=$(run DIGEST=sha256:old); test $? -eq 1 && test -z "$out" && grep -q " none$" $t/rt/fh-update-available'
+check bash -c "$upd"'; test "$(run STAGED={})" = staged && test ! -e $t/n'   # staged: no registry needed
+# a fresh cached answer is reused without asking the registry again
+check bash -c "$upd"'; run >/dev/null; test "$(run DIGEST=sha256:old)" = available && test "$(cat $t/n)" = 1'
+# offline for two attempts, back on the third: still finds the update
+check bash -c "$upd"'; test "$(run FAILS=2)" = available && test "$(cat $t/n)" = 3'
+# failures: exit 1, nothing printed, nothing cached, so the next poll asks again
+check bash -c "$upd"'; uncached FAILS=99'
+check bash -c "$upd"'; uncached DIGEST='                        # registry answered without a digest
+check bash -c "$upd"'; uncached SUDO_FAIL=1'
+check bash -c "$upd"'; uncached STATUS_JSON="not json"'
+check bash -c "$upd"'; uncached STATUS_JSON="{\"status\":{\"booted\":null}}"'
+# the retry budget is a hard cap: FH_UPDATE_NET_WAIT=3 with a registry that never answers
+check bash -c "$upd"'; s=$SECONDS; uncached FAILS=99; test $((SECONDS - s)) -le 4'
+# garbage tuning values fall back to the defaults instead of breaking the arithmetic
+check bash -c "$upd"'; test "$(run FH_UPDATE_NET_WAIT=x FH_UPDATE_RETRY_DELAY=-1)" = available'
+# booted from local containers-storage: no registry to ask, no retry loop
+check bash -c "$upd"'; out=$(run TRANSPORT=containers-storage); test $? -eq 1 && test -z "$out" && test ! -e $t/n'
 # scoped sudoers rule: %wheel gets passwordless sudo for exactly this bootc status invocation
 check visudo -cf /etc/sudoers.d/zz-fh-update-available
 check test "$(stat -c %a /etc/sudoers.d/zz-fh-update-available)" = 440
