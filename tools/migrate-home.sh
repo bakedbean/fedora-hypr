@@ -342,6 +342,13 @@ if [[ -d $SRC/$wb ]]; then
         ' "$cfg" > "$cfg.tmp" && mv "$cfg.tmp" "$cfg"
       fi
       REWRITES+=("$wb/config.jsonc: custom/update tooltip-format -> '$ttf'")
+      # the old config polled every 6 h (21600); fh-update-available is built for the image default's
+      # hourly poll: a poll that can't reach the registry caches nothing, and the next one is the retry
+      if sed -n '/^  "custom\/update": {/,/^  },\?$/p' "$cfg" | grep -Eq '"interval": *[0-9]+' &&
+        ! sed -n '/^  "custom\/update": {/,/^  },\?$/p' "$cfg" | grep -Eq '"interval": *3600\b'; then
+        sed -i '/^  "custom\/update": {/,/^  },\?$/ s/"interval": *[0-9]\+/"interval": 3600/' "$cfg"
+        REWRITES+=("$wb/config.jsonc: custom/update interval -> 3600")
+      fi
     fi
     rewrite_home_paths "$cfg"
     # Fedora's Firefox has window class org.mozilla.firefox: give every "class<firefox>" window-rewrite rule a
