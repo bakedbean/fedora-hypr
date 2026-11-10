@@ -326,7 +326,12 @@ prompt if the rule is somehow missing). It's scoped this tightly (one absolute b
 fixed argument list, read-only subcommand) so the access granted is exactly "read bootc status
 unprivileged", nothing else `bootc`/`sudo` can do. Any failure (rule missing, offline, skopeo
 digest mismatch check failing) is treated as "up to date" — the indicator never shows a false
-positive. The `zz-` prefix is load-bearing: see "Things that already bit us".
+positive — but only for that poll: failures are **not cached** (only staged/available/none from a
+successful comparison are), and an unreachable registry is retried every 5 s for up to 90 s
+(`FH_UPDATE_NET_WAIT`/`FH_UPDATE_RETRY_DELAY`), because Waybar polls right after resume, before
+Wi-Fi is back (see "Things that already bit us"). A booted image whose transport isn't `registry`
+(the local-build detour below) answers "none" at once. The `zz-` prefix is load-bearing: see
+"Things that already bit us".
 
 If CI is ever still too slow for a one-package turnaround, the machine can build it itself: a
 cached `make build` here is ~4 s and a full package-layer rebuild ~2m54s. `sudo podman build`
@@ -522,6 +527,15 @@ A failed CI build is safe: the machine keeps its last good image.
   new file; a locally edited old copy survives beside it, harmlessly (it still sorts before `wheel`).
   But a local deletion or edit of the *old* name does not carry over to the new one, so anyone who
   deliberately disabled the grant has to disable `zz-fh-update-available` again.
+- **The update indicator's checks all ran straight after resume, offline, and cached "none".** A laptop
+  that suspends often never sees Waybar's `interval` elapse: the timer doesn't advance while suspended
+  and fires the moment the machine wakes, ~1 s before iwd has even started reconnecting. `skopeo
+  inspect` failed, `fh-update-available` cached `none` for 10 min, and the next poll was another
+  resume — so `44.20261108` went unnoticed for days (2026-11-08 → 11-10) with every piece working when
+  run by hand. Diagnose by lining up `journalctl -b _COMM=sudo | grep bootc` with
+  `journalctl -b -g 'PM: suspend exit'`. Now failures aren't cached and the registry lookup retries
+  for 90 s; `tests/check.sh` covers it with stub `sudo`/`skopeo`. The author's migrated Waybar config
+  also polled every 6 h (Omarchy's value); `migrate-home.sh` now rewrites it to the default 3600.
 - **dockerd cannot unpack this image: overlay2 caps a container at 127 layers.** `base-main` alone
   brings it to ~270, and `docker run` fails with `failed to register layer: max depth exceeded`.
   BuildKit builds and pushes it regardless and ostree does not stack layers at all, so this is a
