@@ -7,14 +7,18 @@
 # Only a definitive answer is cached. A failure (registry unreachable, sudo rule missing) exits 1
 # without touching the cache, so the next poll asks again instead of trusting "none" for
 # CACHE_TTL. Waybar's interval timer does not run during suspend and fires straight after resume,
-# before Wi-Fi is back; so the registry lookup is retried for up to FH_UPDATE_NET_WAIT seconds
-# (Waybar runs exec on a worker thread, waiting does not block the bar).
+# before Wi-Fi is back; so the registry lookup is retried within a budget of FH_UPDATE_NET_WAIT
+# seconds, each attempt capped to what is left of it (Waybar runs exec on a worker thread per
+# module, waiting does not block the bar).
 set -uo pipefail
 
 CACHE=${XDG_RUNTIME_DIR:-/tmp}/fh-update-available
 CACHE_TTL=600 # seconds; keeps a pkill -RTMIN+7 waybar refresh storm off the registry
-NET_WAIT=${FH_UPDATE_NET_WAIT:-90}       # seconds to keep retrying an unreachable registry
-RETRY_DELAY=${FH_UPDATE_RETRY_DELAY:-5}  # seconds between attempts
+NET_WAIT=${FH_UPDATE_NET_WAIT:-90}      # total seconds to spend retrying an unreachable registry
+RETRY_DELAY=${FH_UPDATE_RETRY_DELAY:-5} # seconds between attempts
+ATTEMPT_MAX=30                          # seconds one skopeo attempt may take
+[[ $NET_WAIT =~ ^[0-9]+$ ]] || NET_WAIT=90
+[[ $RETRY_DELAY =~ ^[1-9][0-9]*$ ]] || RETRY_DELAY=5
 
 fail() {
   # transient or setup failure: report "up to date" for this poll only, cache nothing
@@ -63,25 +67,25 @@ if [[ -n $staged ]]; then
   emit staged
 fi
 
-booted_ref=$(jq -r '.status.booted.image.image.image // empty' <<<"$status" 2>/dev/null)
-booted_digest=$(jq -r '.status.booted.image.imageDigest // empty' <<<"$status" 2>/dev/null)
-if [[ -z $booted_ref || -z $booted_digest ]]; then
-  # nothing to compare against (e.g. booted from local containers-storage): a stable answer
-  echo "fh-update-available: no booted image ref/digest in bootc status" >&2
-  emit none
-fi
 booted_transport=$(jq -r '.status.booted.image.image.transport // empty' <<<"$status" 2>/dev/null)
-if [[ $booted_transport != registry ]]; then
+if [[ -n $booted_transport && $booted_transport != registry ]]; then
   # e.g. bootc switch --transport containers-storage: no registry to ask, a stable answer
   emit none
 fi
+booted_ref=$(jq -r '.status.booted.image.image.image // empty' <<<"$status" 2>/dev/null)
+booted_digest=$(jq -r '.status.booted.image.imageDigest // empty' <<<"$status" 2>/dev/null)
+# unparseable or unexpected status: nothing definitive, so nothing cached
+[[ -n $booted_ref && -n $booted_digest ]] || fail "no booted image ref/digest in bootc status"
 
-deadline=$(($(date +%s) + NET_WAIT))
+start=$SECONDS
 while :; do
-  remote=$(skopeo --command-timeout 30s inspect --no-tags "docker://$booted_ref" 2>/dev/null)
+  left=$((NET_WAIT - (SECONDS - start)))
+  ((left >= 1)) || left=1
+  ((left < ATTEMPT_MAX)) && attempt=$left || attempt=$ATTEMPT_MAX
+  remote=$(skopeo --command-timeout "${attempt}s" inspect --no-tags "docker://$booted_ref" 2>/dev/null)
   remote_digest=$(jq -r '.Digest // empty' <<<"$remote" 2>/dev/null)
-  [[ -n $remote_digest ]] && break
-  (($(date +%s) + RETRY_DELAY <= deadline)) || fail "skopeo inspect of $booted_ref failed (offline?)"
+  [[ $remote_digest == sha256:* ]] && break
+  ((SECONDS - start + RETRY_DELAY < NET_WAIT)) || fail "skopeo inspect of $booted_ref failed (offline?)"
   sleep "$RETRY_DELAY"
 done
 

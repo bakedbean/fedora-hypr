@@ -1,0 +1,8 @@
+#!/bin/sh
+# stub skopeo (tests/check.sh): logs argv to $STUB_DIR/args, fails the first FAILS calls,
+# then prints a manifest with DIGEST (default sha256:new; set empty for no digest)
+echo "$*" >>"$STUB_DIR/args"
+n=$(cat "$STUB_DIR/n" 2>/dev/null || echo 0)
+echo $((n + 1)) >"$STUB_DIR/n"
+[ "$n" -ge "${FAILS:-0}" ] || exit 1
+printf '{"Digest":"%s"}\n' "${DIGEST-sha256:new}"
