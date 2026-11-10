@@ -122,7 +122,8 @@ cat > "$src/.config/waybar/config.jsonc" <<EOF
   },
   "custom/docker": {
     "exec": "~/.cargo/bin/waybar-docker",
-    "return-type": "json"
+    "return-type": "json",
+    "interval": 21600
   },
   "clock": {
     "format": "{:%H:%M,}",
@@ -297,6 +298,8 @@ check bash -c "sed 's|//.*||' '$wb/config.jsonc' | jq -e '.\"custom/update\".\"o
 check bash -c "sed 's|//.*||' '$wb/config.jsonc' | jq -e '.\"custom/update\".\"tooltip-format\" == \"fedora-hypr update available — click to install\"'"
 check bash -c "sed 's|//.*||' '$wb/config.jsonc' | jq -e '.\"custom/update\".signal == 7'"
 check bash -c "sed 's|//.*||' '$wb/config.jsonc' | jq -e '.\"custom/update\".interval == 3600'"
+# only custom/update's stock 6 h poll is rewritten: the next module's identical value is not
+check bash -c "sed 's|//.*||' '$wb/config.jsonc' | jq -e '.\"custom/docker\".interval == 21600'"
 check bash -c "sed 's|//.*||' '$wb/config.jsonc' | jq -e '.\"modules-left\"[0] == \"custom/menu\"'"
 check bash -c "sed 's|//.*||' '$wb/config.jsonc' | jq -e '.\"custom/menu\".\"on-click\" == \"fh-menu\"'"
 menu_glyph=$(sed 's|//.*||' "$here/../system/usr/share/fedora-hypr/default/waybar/config.jsonc" | jq -r '."custom/menu".format')
